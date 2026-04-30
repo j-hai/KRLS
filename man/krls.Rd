@@ -142,7 +142,7 @@ Kimeldorf, G.S. Wahba, G. 1971. Some results on Tchebycheffian spline functions.
 
 }
 \author{
-Jens Hainmueller (Stanford) and Chad Hazlett (MIT)
+Jens Hainmueller (Stanford) and Chad Hazlett (UCLA)
 }
 \note{
 The function requires the storage of a \var{N} by \var{N} kernel matrix and can therefore exceed the memory limits for very large datasets.

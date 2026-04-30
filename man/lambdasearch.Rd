@@ -44,7 +44,7 @@ A scalar that contains the \eqn{\lambda}{lambda} that minimizes the sum of squar
 }
 
 \author{
-Jens Hainmueller (Stanford) and Chad Hazlett (MIT)
+Jens Hainmueller (Stanford) and Chad Hazlett (UCLA)
 }
 
 \seealso{
