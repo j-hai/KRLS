@@ -11,8 +11,36 @@ function(     X=NULL,
               L=NULL,
               U=NULL,
               tol=NULL,
-							eigtrunc=NULL){
-              
+							eigtrunc=NULL,
+              data=NULL){
+
+      # ---- formula interface --------------------------------------------------
+      # If the user passed a two-sided formula as the first argument, build
+      # X and y from formula + data and continue with the matrix interface.
+      # Implemented as in-function dispatch (rather than UseMethod) to avoid
+      # CRAN R CMD check NOTEs about long-standing top-level functions
+      # whose names accidentally match the <generic>.<class> pattern.
+      if (inherits(X, "formula")) {
+        formula <- X
+        if (is.null(data))
+          stop("'data' is required when calling krls() with a formula")
+        if (length(formula) != 3L)
+          stop("formula must be two-sided, e.g. y ~ x1 + x2")
+        mf <- model.frame(formula, data = data, na.action = stats::na.pass)
+        yvec <- stats::model.response(mf)
+        if (is.null(yvec))
+          stop("formula has no response (left-hand side); expected y ~ x1 + x2 + ...")
+        if (any(is.na(yvec)))
+          stop("y contains missing data")
+        if (any(is.na(mf)))
+          stop("X contains missing data")
+        Xmat <- stats::model.matrix(formula, data = mf)
+        if ("(Intercept)" %in% colnames(Xmat))
+          Xmat <- Xmat[, colnames(Xmat) != "(Intercept)", drop = FALSE]
+        X <- Xmat
+        y <- yvec
+      }
+
       # checks
       y <- as.matrix(y)
       X <- as.matrix(X)

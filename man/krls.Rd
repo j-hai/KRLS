@@ -9,16 +9,21 @@ Function implements Kernel-Based Regularized Least Squares (KRLS), a machine lea
 }
 \usage{
 krls(X = NULL, y = NULL, whichkernel = "gaussian", lambda = NULL,
-sigma = NULL, derivative = TRUE, binary= TRUE, vcov=TRUE, 
-print.level = 1,L=NULL,U=NULL,tol=NULL,eigtrunc=NULL)
+sigma = NULL, derivative = TRUE, binary= TRUE, vcov=TRUE,
+print.level = 1,L=NULL,U=NULL,tol=NULL,eigtrunc=NULL,data=NULL)
 }
 
 \arguments{
   \item{X}{
-\var{N} by \var{D} data numeric matrix that contains the values of \var{D} predictor variables for \eqn{i=1,\ldots,N} observations. The matrix may not contain missing values or constants. Note that no intercept is required since the function operates on demeaned data and subtracting the mean of \var{y} is equivalent to including an (unpenalized) intercept into the model.
+For the matrix interface (the original): an \var{N} by \var{D} numeric data matrix that contains the values of \var{D} predictor variables for \eqn{i=1,\ldots,N} observations. The matrix may not contain missing values or constants. Note that no intercept is required since the function operates on demeaned data and subtracting the mean of \var{y} is equivalent to including an (unpenalized) intercept into the model.
+
+For the formula interface (added in 1.2-0): a two-sided formula of the form \code{y ~ x1 + x2 + ...} with the response on the left-hand side and the covariates on the right. \code{data} must be supplied. The intercept column is dropped automatically. Both interfaces produce the same fit; the formula form is purely an ergonomic wrapper.
 }
   \item{y}{
-\var{N} by \var{1} data numeric matrix or vector that contains the values of the response variable for all observations. This vector may not contain missing values. 
+\var{N} by \var{1} data numeric matrix or vector that contains the values of the response variable for all observations. This vector may not contain missing values. Ignored when \code{X} is a formula (the response is taken from the formula).
+}
+  \item{data}{
+For the formula interface: a \code{data.frame} containing the variables referenced in the formula. Required when \code{X} is a formula; ignored otherwise.
 }
   \item{whichkernel}{
 String vector that specifies which kernel should be used. Must be one of \code{gaussian}, \code{linear}, \code{poly1}, \code{poly2}, \code{poly3}, or \code{poly4} (see details). Default is \code{gaussian}.
