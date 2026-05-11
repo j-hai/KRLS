@@ -17,10 +17,12 @@ function(     X=NULL,
               nystrom_m=NULL,
               landmarks=NULL,
               landmark_method=c("random","kmeans"),
-              nystrom_eps=sqrt(.Machine$double.eps)){
+              nystrom_eps=sqrt(.Machine$double.eps),
+              lambda_method=c("loo","gcv")){
 
       approx          <- match.arg(approx)
       landmark_method <- match.arg(landmark_method)
+      lambda_method   <- match.arg(lambda_method)
 
       # ---- formula interface --------------------------------------------------
       # If the user passed a two-sided formula as the first argument, build
@@ -156,7 +158,8 @@ function(     X=NULL,
         nys <- .fit_krls_nystrom(X, y, sigma, landmarks_resolved,
                                  lambda, nystrom_eps,
                                  L, U, tol, noisy,
-                                 compute_vcov = vcov)
+                                 compute_vcov = vcov,
+                                 lambda_method = lambda_method)
 
         if (print.level > 1)
           cat("Lambda that minimizes Loo-Loss is:", round(nys$lambda, 5), "\n")
@@ -218,6 +221,7 @@ function(     X=NULL,
           vcov.c             = if (vcov) (y.init.sd^2) * vcovmatc else NULL,
           vcov.fitted        = NULL,
           binaryindicator    = binaryindicator,
+          lambda_method      = lambda_method,
           # Nystrom-specific fields
           approx             = "nystrom",
           landmarks          = nys$landmarks,
@@ -266,7 +270,7 @@ function(     X=NULL,
       # default lambda is chosen by leave-one-out optimization (golden section search)
       if (is.null(lambda)) {
        noisy <- print.level > 2
-       lambda <- lambdasearch(L=L,U=U,y=y,Eigenobject=Eigenobject,tol=tol,eigtrunc=eigtrunc,noisy=noisy)
+       lambda <- lambdasearch(L=L,U=U,y=y,Eigenobject=Eigenobject,tol=tol,eigtrunc=eigtrunc,noisy=noisy,lambda_method=lambda_method)
          
        if(print.level>1) { cat("Lambda that minimizes Loo-Loss is:",round(lambda,5),"\n")}    
        
@@ -380,11 +384,12 @@ function(     X=NULL,
              lambda=lambda,
              R2 = R2,
              derivatives=derivmat,
-             avgderivatives=avgderiv, 
+             avgderivatives=avgderiv,
              var.avgderivatives=varavgderivmat,
              vcov.c=vcov.c,
              vcov.fitted=vcov.fitted,
-             binaryindicator=binaryindicator
+             binaryindicator=binaryindicator,
+             lambda_method=lambda_method
             )          
   class(z) <- "krls"
     

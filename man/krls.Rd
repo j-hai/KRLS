@@ -13,7 +13,8 @@ sigma = NULL, derivative = TRUE, binary= TRUE, vcov=TRUE,
 print.level = 1,L=NULL,U=NULL,tol=NULL,eigtrunc=NULL,data=NULL,
 approx = c("none", "nystrom"), nystrom_m = NULL, landmarks = NULL,
 landmark_method = c("random", "kmeans"),
-nystrom_eps = sqrt(.Machine$double.eps))
+nystrom_eps = sqrt(.Machine$double.eps),
+lambda_method = c("loo", "gcv"))
 }
 
 \arguments{
@@ -117,6 +118,21 @@ before the feature map is built; this stabilizes the
 \eqn{W^{-1/2}}{W^(-1/2)} operation when landmarks are near-collinear in
 feature space. Documented as numerical stabilization, not a modeling
 parameter. Default is \code{sqrt(.Machine$double.eps)}.
+}
+
+\item{lambda_method}{
+String selecting the objective minimized to choose
+\eqn{\lambda}{lambda} when \code{lambda} is not supplied.
+\code{"loo"} (the default) uses the closed-form leave-one-out sum of
+squared errors -- the historical KRLS criterion. \code{"gcv"} uses
+generalized cross-validation,
+\eqn{RSS(\lambda) / (1 - \mathrm{tr}(S(\lambda))/n)^2}{RSS(lambda) /
+(1 - tr(S(lambda))/n)^2}, computed in closed form from the kernel
+eigendecomposition (exact path) or the cached SVD of \eqn{\Phi}{Phi}
+(Nystrom path). Both methods are evaluated at the same per-iteration
+cost; GCV is often preferred when one or two observations have
+disproportionate leverage. Ignored when \code{lambda} is supplied
+directly.
 }
 
 }

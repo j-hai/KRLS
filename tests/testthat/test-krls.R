@@ -6,7 +6,8 @@ test_that("krls() returns the expected structure on linear data", {
   expect_named(fit, c("K", "coeffs", "Looe", "fitted", "X", "y",
                       "sigma", "lambda", "R2", "derivatives",
                       "avgderivatives", "var.avgderivatives",
-                      "vcov.c", "vcov.fitted", "binaryindicator"),
+                      "vcov.c", "vcov.fitted", "binaryindicator",
+                      "lambda_method"),
                ignore.order = TRUE)
   expect_length(fit$fitted, length(d$y))
   expect_gt(fit$R2, 0.9)
@@ -61,6 +62,28 @@ test_that("user-supplied tol is honored by lambdasearch (regression for 1.3-0)",
   fit_loose <- krls(X = d$X, y = d$y, tol = 1e9, print.level = 0)
   fit_tight <- krls(X = d$X, y = d$y, print.level = 0)
   expect_false(isTRUE(all.equal(fit_loose$lambda, fit_tight$lambda)))
+})
+
+test_that("lambda_method = 'gcv' returns a plausible lambda (exact path)", {
+  d <- make_nonlinear_data(N = 100)
+  fit_loo <- krls(d$X, d$y, lambda_method = "loo", print.level = 0)
+  fit_gcv <- krls(d$X, d$y, lambda_method = "gcv", print.level = 0)
+
+  expect_equal(fit_loo$lambda_method, "loo")
+  expect_equal(fit_gcv$lambda_method, "gcv")
+  expect_true(fit_gcv$lambda > 0 && is.finite(fit_gcv$lambda))
+  # GCV and LOO typically agree to within a small multiplicative factor.
+  expect_lt(abs(log(fit_gcv$lambda) - log(fit_loo$lambda)), log(10))
+  # GCV fit should still recover the truth.
+  expect_gt(fit_gcv$R2, 0.85)
+})
+
+test_that("default lambda_method is 'loo' (backward compatibility)", {
+  d <- make_nonlinear_data(N = 80)
+  fit_default <- krls(d$X, d$y, print.level = 0)
+  fit_loo     <- krls(d$X, d$y, lambda_method = "loo", print.level = 0)
+  expect_equal(fit_default$lambda_method, "loo")
+  expect_equal(fit_default$lambda, fit_loo$lambda, tolerance = 1e-12)
 })
 
 test_that("aggressive eigtrunc that keeps a single eigenvector works", {

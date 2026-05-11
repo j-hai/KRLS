@@ -294,6 +294,20 @@ test_that("L >= U lambda-window is rejected", {
                "L must be strictly less than U")
 })
 
+test_that("lambda_method = 'gcv' under Nystrom produces a plausible fit", {
+  d <- make_nonlinear_data(N = 200)
+  fit_loo <- krls(d$X, d$y, approx = "nystrom", nystrom_m = 40,
+                  lambda_method = "loo", print.level = 0)
+  fit_gcv <- krls(d$X, d$y, approx = "nystrom", nystrom_m = 40,
+                  lambda_method = "gcv", print.level = 0)
+
+  expect_equal(fit_loo$lambda_method, "loo")
+  expect_equal(fit_gcv$lambda_method, "gcv")
+  expect_true(fit_gcv$lambda > 0 && is.finite(fit_gcv$lambda))
+  expect_gt(fit_gcv$R2, 0.85)
+  expect_lt(abs(log(fit_gcv$lambda) - log(fit_loo$lambda)), log(10))
+})
+
 test_that("malformed landmark matrices are rejected", {
   d <- make_nonlinear_data(N = 60)
   # Duplicate rows make the landmark kernel rank-deficient.

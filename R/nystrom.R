@@ -146,7 +146,9 @@
 .fit_krls_nystrom <- function(X, y, sigma, landmarks_resolved,
                               lambda, nystrom_eps,
                               L, U, tol, noisy,
-                              compute_vcov = TRUE) {
+                              compute_vcov = TRUE,
+                              lambda_method = c("loo", "gcv")) {
+  lambda_method <- match.arg(lambda_method)
   n <- nrow(X)
   Z <- landmarks_resolved$matrix
   m <- nrow(Z)
@@ -177,18 +179,27 @@
   svd_phi  <- svd(Phi)
   Sigma2   <- svd_phi$d^2
 
-  ## LOO loss at a given lambda, O(n m) using the cached SVD.
+  ## LOO and GCV objectives at a given lambda. Both run in O(n m) from
+  ## the cached SVD; both are guarded against near-singular denominators
+  ## (which can arise at extremely small lambda).
   loo_loss <- function(lambda_val) {
     w     <- Sigma2 / (Sigma2 + lambda_val)
     yfit  <- as.numeric(svd_phi$u %*% (w * crossprod(svd_phi$u, y_vec)))
     diagS <- as.numeric((svd_phi$u^2) %*% w)
-    # Guard against (1 - diagS) ~ 0 from rounding when lambda is tiny
-    # and the leave-one-out residual blows up; replace with Inf so the
-    # search avoids that region.
     denom <- 1 - diagS
     if (any(denom <= .Machine$double.eps)) return(.Machine$double.xmax)
     sum(((y_vec - yfit) / denom)^2)
   }
+  gcv_loss <- function(lambda_val) {
+    w     <- Sigma2 / (Sigma2 + lambda_val)
+    yfit  <- as.numeric(svd_phi$u %*% (w * crossprod(svd_phi$u, y_vec)))
+    RSS   <- sum((y_vec - yfit)^2)
+    tr_S  <- sum(w)
+    denom <- 1 - tr_S / n
+    if (denom <= .Machine$double.eps) return(.Machine$double.xmax)
+    RSS / (denom^2)
+  }
+  obj_fn <- if (lambda_method == "loo") loo_loss else gcv_loss
 
   if (is.null(lambda)) {
     if (is.null(tol)) tol <- 1e-3 * n
@@ -198,16 +209,16 @@
     # Golden-section search, structurally identical to lambdasearch().
     gr  <- 0.381966
     X1  <- L + gr * (U - L); X2 <- U - gr * (U - L)
-    S1  <- loo_loss(X1);     S2 <- loo_loss(X2)
+    S1  <- obj_fn(X1);       S2 <- obj_fn(X2)
     if (noisy) cat("L:", L, "X1:", X1, "X2:", X2, "U:", U,
                    "S1:", S1, "S2:", S2, "\n")
     while (abs(S1 - S2) > tol) {
       if (S1 < S2) {
         U  <- X2; X2 <- X1; X1 <- L + gr * (U - L)
-        S2 <- S1; S1 <- loo_loss(X1)
+        S2 <- S1; S1 <- obj_fn(X1)
       } else {
         L  <- X1; X1 <- X2; X2 <- U - gr * (U - L)
-        S1 <- S2; S2 <- loo_loss(X2)
+        S1 <- S2; S2 <- obj_fn(X2)
       }
       if (noisy) cat("L:", L, "X1:", X1, "X2:", X2, "U:", U,
                      "S1:", S1, "S2:", S2, "\n")

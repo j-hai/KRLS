@@ -1,3 +1,25 @@
+# KRLS 1.5-0
+
+## New: `lambda_method = "gcv"`
+
+* `krls(..., lambda_method = c("loo", "gcv"))` adds a generalized
+  cross-validation alternative to the historical leave-one-out
+  criterion. GCV minimizes
+  `RSS(lambda) / (1 - tr(S(lambda))/n)^2` and is computed in closed
+  form from the kernel eigendecomposition (exact path) or from the
+  cached SVD of Phi (Nystrom path). Both methods evaluate at the same
+  per-iteration cost, so the choice is essentially free. Default is
+  `"loo"` -- backward-compatible with all earlier KRLS releases.
+* The chosen objective is recorded on the fit object as
+  `lambda_method`.
+
+## New: Nystrom scaling vignette
+
+* `vignette("krls-nystrom-scaling", package = "KRLS")` walks through
+  the exact-vs-Nystrom runtime comparison, the landmark-reuse pattern
+  via `get_landmarks()`, and the LOO-vs-GCV trade-off. Covers what to
+  expect when moving past the exact path's ~5,000-row ceiling.
+
 # KRLS 1.4-1
 
 Polish patch for the Nystrom path that landed in 1.4-0. All changes
