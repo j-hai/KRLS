@@ -1,3 +1,14 @@
+# KRLS 1.5-2
+
+## Fixes
+
+* Nystrom fits with an underflowed cross-kernel (very small `sigma`
+  for the data scale, or landmarks placed far from the observations)
+  now signal a clear error pointing at sigma/landmark scale, instead
+  of failing later inside the lambda-bound search with a cryptic
+  `missing value where TRUE/FALSE needed`. The guard runs whether
+  `lambda` is supplied directly or auto-selected.
+
 # KRLS 1.5-1
 
 Bug-fix patch for the Nystrom path that landed in 1.4-0 / 1.4-1.

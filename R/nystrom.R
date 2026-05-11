@@ -210,6 +210,19 @@
   svd_phi  <- svd(Phi)
   Sigma2   <- svd_phi$d^2
 
+  # Guard against a numerically zero feature spectrum. This happens
+  # when sigma is so small (or the landmarks so far from the data)
+  # that every cross-kernel entry underflows; the lambda-bound search
+  # then evaluates 0/0 and aborts with a cryptic NaN comparison.
+  if (max(Sigma2) <= 0) {
+    stop("Nystrom feature spectrum is numerically zero -- the cross ",
+         "kernel K(X, landmarks) underflowed. This usually means ",
+         "sigma is too small for the data scale, or the supplied ",
+         "landmarks are very far from the observations. Try a larger ",
+         "sigma, use landmark_method = 'random' to sample landmarks ",
+         "from X, or rescale the predictors.")
+  }
+
   ## LOO and GCV objectives at a given lambda. Both run in O(n m) from
   ## the cached SVD; both are guarded against near-singular denominators
   ## (which can arise at extremely small lambda).

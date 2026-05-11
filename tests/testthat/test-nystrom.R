@@ -307,6 +307,26 @@ test_that("Nystrom m = 1 picks a sensible lambda (regression for 1.5-1)", {
   expect_true(fit_gcv$lambda > 1e-6)
 })
 
+test_that("Nystrom zero feature spectrum errors clearly (regression for 1.5-2)", {
+  # When the Nystrom cross-kernel underflows to a numerically zero
+  # feature spectrum, the lambda-bound loop used to evaluate 0/0 and
+  # abort with a cryptic "missing value where TRUE/FALSE needed".
+  # The guard fires before the bound search.
+  #
+  # Trigger: landmarks placed so far from the data that every
+  # K(X, landmark) entry underflows. (Tiny sigma alone isn't a
+  # reliable trigger because random/kmeans landmarks frequently
+  # coincide with -- or are very close to -- a training row, keeping
+  # at least one feature-spectrum entry nonzero.)
+  d <- make_nonlinear_data(N = 60)
+  far_Z <- d$X[1:3, , drop = FALSE] + 1e6
+  expect_error(
+    krls(d$X, d$y, approx = "nystrom", landmarks = far_Z,
+         print.level = 0),
+    "feature spectrum is numerically zero"
+  )
+})
+
 test_that("Nystrom kmeans handles m == n (regression for 1.5-1)", {
   # stats::kmeans() requires centers < n; m == n is a degenerate but
   # legal request. Short-circuit to using every row.

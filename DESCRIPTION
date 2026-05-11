@@ -1,7 +1,7 @@
 Package: KRLS
 Type: Package
 Title: Kernel-Based Regularized Least Squares
-Version: 1.5-1
+Version: 1.5-2
 Date: 2026-05-11
 Authors@R: c(
     person("Jens", "Hainmueller", email = "jhain@stanford.edu", role = c("aut", "cre")),
