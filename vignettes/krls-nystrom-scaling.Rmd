@@ -8,7 +8,7 @@ output:
     toc_depth: 2
 vignette: >
   %\VignetteIndexEntry{Scaling KRLS to larger n: the Nystrom approximation}
-  %\VignetteEngine{knitr::knitr}
+  %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
 
