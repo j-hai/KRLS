@@ -13,6 +13,44 @@ function(object, probs=c(.25,.5,.75),...)
         d <- ncol(object$X)
         n <- nrow(object$X)
 
+        # Nystrom-specific block: surface the approximation choices and
+        # any diagnostic concerns (e.g. many landmark eigenvalues at the
+        # relative-ridge floor, which signals near-collinear landmarks).
+        if (!is.null(object$approx) && object$approx == "nystrom") {
+          method_lbl <- switch(if (is.null(object$landmark_method)) "unknown" else object$landmark_method,
+            random       = "random",
+            kmeans       = "k-means",
+            user_indices = "user-supplied indices",
+            user_matrix  = "user-supplied matrix",
+            object$landmark_method)
+          cat("Approximation: Nystrom with m =", object$nystrom_m,
+              "landmarks (", method_lbl, ")\n")
+          cat("Inference:", switch(if (is.null(object$inference)) "none" else object$inference,
+            conditional_nystrom = "conditional approximate",
+            none                = "point estimates only (vcov = FALSE)",
+            object$inference), "\n")
+          if (!is.null(object$D_max_raw) && !is.null(object$D_min_raw) &&
+              is.finite(object$D_max_raw) && object$D_max_raw > 0) {
+            cond_str <- if (object$D_min_raw <= 0) {
+              "rank-deficient"
+            } else {
+              sprintf("%.2g", object$D_max_raw / object$D_min_raw)
+            }
+            cat("Landmark kernel: condition =", cond_str, ",",
+                object$floored_count, "of", object$nystrom_m,
+                "eigenvalues at relative-ridge floor\n")
+            # Loud-but-not-fatal warning if a large fraction were floored.
+            if (!is.null(object$floored_count) &&
+                object$floored_count > object$nystrom_m / 2) {
+              cat("  Note: more than half of the landmark-kernel ",
+                  "eigenvalues are at the relative-ridge floor; ",
+                  "consider larger sigma, fewer landmarks, or more ",
+                  "distinct landmark coordinates.\n", sep = "")
+            }
+          }
+          cat("\n")
+        }
+
         coefficients <- matrix(NA,d,0)
         rownames(coefficients) <- colnames(object$X)
 

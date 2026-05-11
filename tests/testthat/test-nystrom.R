@@ -221,9 +221,90 @@ test_that("Nyström rejects unsupported options cleanly", {
     krls(d$X, d$y, approx = "nystrom", eigtrunc = 0.001, print.level = 0),
     "eigtrunc"
   )
-  expect_error(
-    krls(d$X, d$y, approx = "nystrom",
-         landmark_method = "kmeans", nystrom_m = 10, print.level = 0),
-    "kmeans"
-  )
+})
+
+# --- 1.4-1 polish bundle -----------------------------------------------------
+
+test_that("landmark_method = 'kmeans' produces sensible landmarks", {
+  d <- make_nonlinear_data(N = 120)
+  set.seed(2026)
+  fit <- krls(d$X, d$y, approx = "nystrom", nystrom_m = 25,
+              landmark_method = "kmeans", print.level = 0)
+  expect_equal(fit$landmark_method, "kmeans")
+  expect_null(fit$landmark_indices)
+  expect_equal(dim(fit$landmarks), c(25L, ncol(d$X)))
+  expect_gt(fit$R2, 0.85)
+})
+
+test_that("get_landmarks() returns coordinates in the requested scale", {
+  d <- make_nonlinear_data(N = 80)
+  fit <- krls(d$X, d$y, approx = "nystrom", nystrom_m = 20, print.level = 0)
+
+  Z_orig <- get_landmarks(fit)
+  Z_std  <- get_landmarks(fit, scale = "standardized")
+  expect_equal(dim(Z_orig), c(20L, ncol(d$X)))
+  expect_equal(unname(Z_std), unname(fit$landmarks), tolerance = 1e-12)
+  # Round-trip: passing original-scale landmarks back reproduces the fit.
+  fit_back <- krls(d$X, d$y, approx = "nystrom",
+                   landmarks = Z_orig, print.level = 0)
+  expect_equal(as.vector(fit$fitted), as.vector(fit_back$fitted),
+               tolerance = 1e-8)
+})
+
+test_that("get_landmarks() errors on non-Nyström fits", {
+  d <- make_nonlinear_data(N = 60)
+  fit_exact <- krls(d$X, d$y, print.level = 0)
+  expect_error(get_landmarks(fit_exact), "approx = 'nystrom'")
+  expect_error(get_landmarks(list(foo = 1)), "class 'krls'")
+})
+
+test_that("glance() Nyström columns and eff_df are populated", {
+  d <- make_nonlinear_data(N = 100)
+  fit <- krls(d$X, d$y, approx = "nystrom", nystrom_m = 30, print.level = 0)
+  g <- generics::glance(fit)
+  expect_true(all(c("approx", "nystrom_m", "inference") %in% colnames(g)))
+  expect_equal(g$approx, "nystrom")
+  expect_equal(g$nystrom_m, 30L)
+  expect_equal(g$inference, "conditional_nystrom")
+  expect_true(is.finite(g$eff_df))
+  expect_true(g$eff_df > 0 && g$eff_df <= 30)
+
+  # Exact path still reports approx = "none" and a finite eff_df.
+  fit_e <- krls(d$X, d$y, print.level = 0)
+  g_e <- generics::glance(fit_e)
+  expect_equal(g_e$approx, "none")
+  expect_true(is.na(g_e$nystrom_m))
+  expect_true(is.finite(g_e$eff_df))
+})
+
+test_that("summary() prints Nyström approximation block with diagnostics", {
+  d <- make_nonlinear_data(N = 100)
+  fit <- krls(d$X, d$y, approx = "nystrom", nystrom_m = 25, print.level = 0)
+  out <- capture.output(summary(fit))
+  expect_true(any(grepl("Approximation: Nystrom with m = 25", out)))
+  expect_true(any(grepl("Inference: conditional approximate", out)))
+  expect_true(any(grepl("Landmark kernel: condition", out)))
+})
+
+test_that("L >= U lambda-window is rejected", {
+  d <- make_nonlinear_data(N = 50)
+  expect_error(krls(d$X, d$y, L = 10, U = 5, print.level = 0),
+               "L must be strictly less than U")
+  expect_error(krls(d$X, d$y, L = 1, U = 1, print.level = 0),
+               "L must be strictly less than U")
+})
+
+test_that("malformed landmark matrices are rejected", {
+  d <- make_nonlinear_data(N = 60)
+  # Duplicate rows make the landmark kernel rank-deficient.
+  Z_dup <- rbind(d$X[1, , drop = FALSE], d$X[1, , drop = FALSE],
+                 d$X[2, , drop = FALSE])
+  expect_error(krls(d$X, d$y, approx = "nystrom", landmarks = Z_dup,
+                    print.level = 0),
+               "duplicate rows")
+  # NA / non-finite entries.
+  Z_bad <- d$X[1:3, , drop = FALSE]; Z_bad[1, 1] <- NA
+  expect_error(krls(d$X, d$y, approx = "nystrom", landmarks = Z_bad,
+                    print.level = 0),
+               "finite")
 })

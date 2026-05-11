@@ -1,3 +1,56 @@
+# KRLS 1.4-1
+
+Polish patch for the Nystrom path that landed in 1.4-0. All changes
+are additive and non-breaking; existing code paths are unaffected.
+
+## New: `landmark_method = "kmeans"`
+
+* `krls(..., approx = "nystrom", landmark_method = "kmeans")` selects
+  landmarks as the cluster centers of a `stats::kmeans()` run on the
+  standardized predictors. More robust than random sampling when the
+  predictor distribution is imbalanced. Random sampling remains the
+  default because it is simpler and bit-reproducible under
+  `set.seed()`; k-means initialization is reproducible within an R
+  version but not bit-stable across versions.
+
+## New: `get_landmarks()` accessor
+
+* `get_landmarks(fit, scale = c("original", "standardized"))` returns
+  the landmark coordinates from a Nystrom fit. The default
+  `"original"` scale un-standardizes the stored matrix so it can be
+  passed back through `krls(..., landmarks = ...)` without the
+  standardize-twice bug. Useful for sensitivity-check refits and
+  for inspecting which points the approximation is anchored at.
+
+## Improved diagnostics
+
+* `summary()` on a Nystrom fit now prints the approximation
+  configuration (m, landmark method, inference type) and the
+  landmark-kernel condition number alongside the count of eigenvalues
+  that landed at the relative-ridge floor. When more than half of the
+  landmark eigenvalues are floored, an explanatory note is emitted
+  pointing at sigma / m / landmark distinctness as the likely cause.
+* `glance()` gains `approx`, `nystrom_m`, and `inference` columns.
+  Under Nystrom, `eff_df` is now computed correctly from the cached
+  Phi spectrum (`Sigma2`) rather than returning `NA`.
+
+## Better input validation
+
+* `krls()` now rejects user-supplied lambda-search windows where
+  `L >= U` up front rather than producing a silently invalid
+  golden-section sweep.
+* User-supplied `landmarks` matrices are checked for NAs, non-finite
+  entries, and duplicate rows (which would make the landmark kernel
+  rank-deficient).
+
+## Fit object additions (Nystrom only)
+
+* `landmark_method`: `"random"`, `"kmeans"`, `"user_indices"`, or
+  `"user_matrix"` recording which path produced the landmarks.
+* `Sigma2`, `floored_count`, `D_min_raw`, `D_max_raw`: diagnostic
+  scalars from the W eigendecomposition; consumed by `summary()` and
+  `glance()` and available to downstream code.
+
 # KRLS 1.4-0
 
 ## New: Nystrom approximation with conditional approximate inference

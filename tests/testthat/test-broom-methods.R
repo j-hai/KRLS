@@ -25,7 +25,11 @@ test_that("glance.krls returns the documented summary columns", {
   out <- glance.krls(fit)
   expect_equal(nrow(out), 1L)
   expect_named(out, c("nobs", "n_predictors", "r.squared", "loo_mse",
-                      "lambda", "sigma", "eff_df"))
+                      "lambda", "sigma", "eff_df",
+                      "approx", "nystrom_m", "inference"))
+  # Exact-path fits report approx = "none" with a NA nystrom_m.
+  expect_equal(out$approx, "none")
+  expect_true(is.na(out$nystrom_m))
   expect_equal(out$nobs, 60L)
   expect_equal(out$n_predictors, 2L)
   expect_true(out$r.squared > 0 && out$r.squared <= 1)

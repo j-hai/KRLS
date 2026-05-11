@@ -1,4 +1,5 @@
 export(gausskernel,
+       get_landmarks,
        krls,
        looloss,
        predict.krls,
@@ -8,9 +9,9 @@ export(gausskernel,
 
 importFrom("grDevices", "devAskNewPage")
 importFrom("graphics", "arrows", "par", "plot")
-importFrom("stats", "as.formula", "dist", "model.frame", "model.matrix",
-           "model.response", "na.pass", "predict", "pt", "qt",
-           "quantile", "sd", "setNames", "var")
+importFrom("stats", "as.formula", "dist", "kmeans", "model.frame",
+           "model.matrix", "model.response", "na.pass", "predict",
+           "pt", "qt", "quantile", "sd", "setNames", "var")
 
 S3method(plot, krls)
 S3method(predict, krls)

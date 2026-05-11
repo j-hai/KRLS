@@ -56,12 +56,22 @@
     }
     nystrom_m <- .validate_nystrom_m(nystrom_m, n)
     if (landmark_method == "kmeans") {
-      stop("landmark_method = 'kmeans' is not yet implemented; ",
-           "use 'random' or pass landmarks explicitly")
+      # k-means on standardized X. Centers come back in the same
+      # standardized space, so they slot in alongside index-form
+      # landmarks without further transformation. Not bit-stable
+      # across R versions even under set.seed() because of the
+      # Hartigan-Wong algorithm's initialization; documented.
+      km <- stats::kmeans(X_std, centers = nystrom_m, nstart = 10L,
+                          iter.max = 50L)
+      Z  <- unname(km$centers)
+      attr(Z, "kmeans_iter")  <- km$iter
+      attr(Z, "kmeans_tot")   <- km$tot.withinss
+      return(list(indices = NULL, matrix = Z, method_used = "kmeans"))
     }
     idx <- .select_landmarks_random(n, nystrom_m)
     return(list(indices = idx,
-                matrix  = X_std[idx, , drop = FALSE]))
+                matrix  = X_std[idx, , drop = FALSE],
+                method_used = "random"))
   }
 
   if (is.numeric(landmarks) && is.null(dim(landmarks))) {
@@ -74,20 +84,26 @@
       stop("landmarks (as indices) must be unique integers in 1:nrow(X)")
     }
     return(list(indices = idx,
-                matrix  = X_std[idx, , drop = FALSE]))
+                matrix  = X_std[idx, , drop = FALSE],
+                method_used = "user_indices"))
   }
 
   if (is.matrix(landmarks) || is.data.frame(landmarks)) {
     Z <- as.matrix(landmarks)
-    if (!is.numeric(Z)) stop("landmarks matrix must be numeric")
-    if (ncol(Z) != d)   stop("ncol(landmarks) must equal ncol(X)")
+    if (!is.numeric(Z))       stop("landmarks matrix must be numeric")
+    if (ncol(Z) != d)         stop("ncol(landmarks) must equal ncol(X)")
+    if (anyNA(Z) || any(!is.finite(Z)))
+      stop("landmarks matrix must contain only finite, non-NA values")
+    if (anyDuplicated(Z))
+      stop("landmarks matrix must not contain duplicate rows ",
+           "(W would be rank-deficient)")
     # User-supplied landmarks are in original X-scale; standardize using
     # the training X's centers/scales to land in the same standardized
     # kernel space the model uses internally.
     Z_std <- scale(Z, center = X_centers, scale = X_scales)
     attr(Z_std, "scaled:center") <- NULL
     attr(Z_std, "scaled:scale")  <- NULL
-    return(list(indices = NULL, matrix = Z_std))
+    return(list(indices = NULL, matrix = Z_std, method_used = "user_matrix"))
   }
 
   stop("`landmarks` must be NULL, an integer vector of row indices, ",
@@ -147,6 +163,12 @@
   if (Dmax <= 0) stop("anchor kernel W is numerically zero; try a larger sigma")
   D_reg    <- pmax(Dvals, nystrom_eps * Dmax)
   Dinvsqrt <- 1 / sqrt(D_reg)
+
+  # Diagnostics: how many landmark-kernel eigenvalues hit the relative
+  # ridge floor, and the pre-floor spectrum range. Useful for spotting
+  # near-collinear landmarks / oversized m.
+  floored_count <- sum(Dvals < nystrom_eps * Dmax)
+  D_min_raw     <- min(Dvals)
 
   # Phi = C %*% U %*% diag(Dinvsqrt)   (n x m)
   Phi      <- C %*% sweep(We$vectors, 2, Dinvsqrt, `*`)
@@ -225,12 +247,17 @@
     Looe_std         = Looe_std,
     landmarks        = Z,                         # m x d, standardized
     landmark_indices = landmarks_resolved$indices,
+    landmark_method  = landmarks_resolved$method_used,
     W_eigen          = list(values = Dvals, vectors = We$vectors),
     Dinvsqrt         = Dinvsqrt,
+    Sigma2           = Sigma2,                    # m-length, for eff_df / GCV
     vcov_alpha_std   = vcov_alpha_std,
     C                = C,                         # n x m, for derivative loop
     nystrom_m        = m,
-    nystrom_eps      = nystrom_eps
+    nystrom_eps      = nystrom_eps,
+    floored_count    = floored_count,
+    D_min_raw        = D_min_raw,
+    D_max_raw        = Dmax
   )
 }
 

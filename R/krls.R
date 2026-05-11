@@ -94,7 +94,21 @@ function(     X=NULL,
         stop("derivative==TRUE requires vcov=TRUE")
         }
       }
-      
+
+      # If the user supplied both L and U for the lambda search, enforce
+      # L < U up front; otherwise lambdasearch()'s golden-section step
+      # produces nonsense bounds.
+      if (!is.null(L) && !is.null(U)) {
+        if (!is.numeric(L) || !is.numeric(U) || length(L) != 1L ||
+            length(U) != 1L) {
+          stop("L and U must each be a single numeric scalar")
+        }
+        if (!(L < U)) {
+          stop("L must be strictly less than U for the lambda search window")
+        }
+      }
+
+
       # default sigma to dim of X 
       if(is.null(sigma)) { sigma <- d
       } else {
@@ -208,10 +222,15 @@ function(     X=NULL,
           approx             = "nystrom",
           landmarks          = nys$landmarks,
           landmark_indices   = nys$landmark_indices,
+          landmark_method    = nys$landmark_method,
           nystrom_m          = nys$nystrom_m,
           nystrom_eps        = nys$nystrom_eps,
           W_eigen            = nys$W_eigen,
           Dinvsqrt           = nys$Dinvsqrt,
+          Sigma2             = nys$Sigma2,
+          floored_count      = nys$floored_count,
+          D_min_raw          = nys$D_min_raw,
+          D_max_raw          = nys$D_max_raw,
           inference          = if (vcov) "conditional_nystrom" else "none"
         )
         class(z) <- "krls"

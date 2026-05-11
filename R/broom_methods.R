@@ -69,9 +69,14 @@ function(x, ...)
     if (!inherits(x, "krls"))
       stop("x is not of class 'krls'")
     n <- nrow(x$X); d <- ncol(x$X)
-    # Effective degrees of freedom from the kernel ridge: tr(K (K + lambda I)^{-1}).
-    # K is symmetric PSD, so trace = sum of eigenvalues / (eigenvalues + lambda).
-    eff_df <- if (!is.null(x$K) && !is.null(x$lambda)) {
+    # Effective degrees of freedom = tr(S(lambda)).
+    # Under approx = "nystrom" S(lambda) = U_p diag(Sigma2 / (Sigma2 + lambda))
+    # U_p', and the cached Sigma2 from the SVD of Phi gives the trace
+    # directly (the m-dimensional Nystrom spectrum). Under the exact path
+    # we use the eigendecomposition of K stored on the fit object.
+    eff_df <- if (!is.null(x$Sigma2) && !is.null(x$lambda)) {
+      sum(x$Sigma2 / (x$Sigma2 + x$lambda))
+    } else if (!is.null(x$K) && !is.null(x$lambda)) {
       ev <- tryCatch(eigen(x$K, symmetric = TRUE, only.values = TRUE)$values,
                      error = function(e) NA_real_)
       if (length(ev) == 1 && is.na(ev)) NA_real_
@@ -81,6 +86,12 @@ function(x, ...)
     }
     looe_mean <- if (!is.null(x$Looe)) mean(x$Looe^2) else NA_real_
 
+    is_nys     <- !is.null(x$approx) && x$approx == "nystrom"
+    approx_lbl <- if (is.null(x$approx)) "none" else x$approx
+    inference_lbl <- if (is.null(x$inference)) {
+      if (!is.null(x$vcov.c)) "exact" else "none"
+    } else x$inference
+
     data.frame(
       nobs         = n,
       n_predictors = d,
@@ -89,6 +100,9 @@ function(x, ...)
       lambda       = x$lambda,
       sigma        = x$sigma,
       eff_df       = eff_df,
+      approx       = approx_lbl,
+      nystrom_m    = if (is_nys) as.integer(x$nystrom_m) else NA_integer_,
+      inference    = inference_lbl,
       stringsAsFactors = FALSE
     )
   }
