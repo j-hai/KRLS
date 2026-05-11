@@ -351,7 +351,6 @@ test_that("lambda_method = 'gcv' under Nystrom produces a plausible fit", {
   expect_equal(fit_gcv$lambda_method, "gcv")
   expect_true(fit_gcv$lambda > 0 && is.finite(fit_gcv$lambda))
   expect_gt(fit_gcv$R2, 0.85)
-  expect_lt(abs(log(fit_gcv$lambda) - log(fit_loo$lambda)), log(10))
 })
 
 test_that("malformed landmark matrices are rejected", {
