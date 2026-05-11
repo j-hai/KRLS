@@ -1,10 +1,12 @@
 predict.krls <-
 function(object,newdata,se.fit = FALSE,...)
       {
-            
+
         if (!inherits(object, "krls")) {
           stop("object is not of class 'krls'")
         }
+
+        is_nystrom <- !is.null(object$landmarks)
 
         if (isTRUE(se.fit)) {
           if (is.null(object$vcov.c)) {
@@ -13,7 +15,7 @@ function(object,newdata,se.fit = FALSE,...)
         }
 
         newdata <- as.matrix(newdata)
-        # dimension check      
+        # dimension check
         if(ncol(object$X)!=ncol(newdata)){
          stop("ncol(newdata) differs from ncol(X) from fitted krls object")
         }
@@ -23,39 +25,48 @@ function(object,newdata,se.fit = FALSE,...)
         X      <- scale(object$X,center=Xmeans,scale=Xsd)
         # scale test data by means and sd of training data
         newdata.init <- newdata
-        newdata      <- scale(newdata,center=Xmeans,scale=Xsd)      
-        
-        # predict based on new kernel matrix
-        # kernel distances for test points (simply recompute all pairwise distances here because dist() is so fast )
-        nn <- nrow(newdata)     
-        newdataK <- matrix(gausskernel(rbind(newdata,X),sigma=object$sigma)[1:nn , (nn+1):(nn+nrow(X))],nrow=nrow(newdata),byrow=FALSE)
+        newdata      <- scale(newdata,center=Xmeans,scale=Xsd)
+
+        # Predict via kernel against the relevant anchor set: full
+        # training X under the exact path, the m landmarks under
+        # Nystrom. object$coeffs has the matching length.
+        nn <- nrow(newdata)
+        if (is_nystrom) {
+          anchors  <- object$landmarks    # already in standardized space
+          newdataK <- .gauss_cross_kernel(newdata, anchors, object$sigma)
+        } else {
+          anchors  <- X
+          newdataK <- matrix(gausskernel(rbind(newdata, anchors),
+                                         sigma = object$sigma)[1:nn,
+                                                                (nn+1):(nn+nrow(anchors))],
+                             nrow = nn, byrow = FALSE)
+        }
 
         # predict fitted
         yfitted <- newdataK%*%object$coeffs
 
-        
-        # ses for fitted   
+
+        # ses for fitted
         if(se.fit){
         # transform to variance of c's on standarized scale
         vcov.c.raw <-  object$vcov.c * as.vector((1/var(object$y)))
-        vcov.fitted <- tcrossprod(newdataK%*%vcov.c.raw,newdataK)          
+        vcov.fitted <- tcrossprod(newdataK%*%vcov.c.raw,newdataK)
         vcov.fit <- (apply(object$y,2,sd)^2)*vcov.fitted
         se.fit <- matrix(sqrt(diag(vcov.fit)),ncol=1)
         } else {
          vcov.fit <- se.fit <- NULL
         }
-        
+
         # bring back to original scale
         yfitted <- (yfitted * apply(object$y,2,sd))+mean(object$y)
-        
-        
+
+
        return(
            list(
                 fit=yfitted,
                 se.fit=se.fit,
-                vcov.fit=vcov.fit,                
+                vcov.fit=vcov.fit,
                 newdata=newdata,
                 newdataK=newdataK)
-                )       
+                )
 }
-

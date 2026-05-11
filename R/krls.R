@@ -12,7 +12,15 @@ function(     X=NULL,
               U=NULL,
               tol=NULL,
 							eigtrunc=NULL,
-              data=NULL){
+              data=NULL,
+              approx=c("none","nystrom"),
+              nystrom_m=NULL,
+              landmarks=NULL,
+              landmark_method=c("random","kmeans"),
+              nystrom_eps=sqrt(.Machine$double.eps)){
+
+      approx          <- match.arg(approx)
+      landmark_method <- match.arg(landmark_method)
 
       # ---- formula interface --------------------------------------------------
       # If the user passed a two-sided formula as the first argument, build
@@ -81,7 +89,7 @@ function(     X=NULL,
                 is.logical(binary)
                 )
       
-      if(derivative==TRUE){
+      if(derivative==TRUE && approx == "none"){
         if(vcov==FALSE){
         stop("derivative==TRUE requires vcov=TRUE")
         }
@@ -110,9 +118,120 @@ function(     X=NULL,
       y.init <- y
       y.init.sd <- apply(y.init,2,sd)
       y.init.mean <- mean(y.init)
-      X <- scale(X,center=TRUE,scale=X.init.sd)    
+      X <- scale(X,center=TRUE,scale=X.init.sd)
       y <- scale(y,center=y.init.mean,scale=y.init.sd)
-     
+
+      # ---- Nystrom approximation path ---------------------------------------
+      # An explicit low-rank approximation. When vcov=TRUE, inference is
+      # conditional on the selected landmarks and low-rank feature map.
+      if (approx == "nystrom") {
+        if (whichkernel != "gaussian")
+          stop("approx = 'nystrom' currently supports whichkernel = 'gaussian' only")
+        if (!is.null(eigtrunc))
+          stop("eigtrunc is not used under approx = 'nystrom'")
+
+        # X is already standardized here; pass the original X's centers
+        # (column means of X.init) and scales (X.init.sd) so matrix-form
+        # landmarks supplied in original X-scale get standardized
+        # consistently.
+        landmarks_resolved <- .resolve_landmarks(landmarks, landmark_method,
+                                                 nystrom_m, X,
+                                                 colMeans(X.init),
+                                                 X.init.sd)
+        noisy <- print.level > 2
+        nys <- .fit_krls_nystrom(X, y, sigma, landmarks_resolved,
+                                 lambda, nystrom_eps,
+                                 L, U, tol, noisy,
+                                 compute_vcov = vcov)
+
+        if (print.level > 1)
+          cat("Lambda that minimizes Loo-Loss is:", round(nys$lambda, 5), "\n")
+
+        yfitted_std <- nys$fitted_std
+        alpha       <- nys$coeffs                       # m x 1
+        lambda      <- nys$lambda
+        vcovmatc    <- nys$vcov_alpha_std
+
+        # Pointwise derivatives (continuous formula; fdskrls() handles binary).
+        avgderiv <- varavgderivmat <- derivmat <- NULL
+        if (derivative) {
+          derivmat <- .nystrom_derivatives(X, nys$landmarks, nys$C,
+                                           as.vector(alpha), sigma)
+          colnames(derivmat) <- colnames(X)
+          avgderiv <- matrix(colMeans(derivmat), nrow = 1)
+          colnames(avgderiv) <- colnames(X)
+          varavgderivmat <- .nystrom_ame_variances(X, nys$landmarks, nys$C,
+                                                   vcovmatc, sigma)
+          if (!is.null(varavgderivmat)) {
+            colnames(varavgderivmat) <- colnames(X)
+          }
+          # Rescale to original units.
+          derivmat <- scale(y.init.sd * derivmat,
+                            center = FALSE, scale = X.init.sd)
+          attr(derivmat, "scaled:scale") <- NULL
+          avgderiv <- scale(as.matrix(y.init.sd * avgderiv),
+                            center = FALSE, scale = X.init.sd)
+          attr(avgderiv, "scaled:scale") <- NULL
+          if (!is.null(varavgderivmat)) {
+            varavgderivmat <- (y.init.sd / X.init.sd)^2 * varavgderivmat
+            attr(varavgderivmat, "scaled:scale") <- NULL
+          }
+        }
+
+        # Rescale fitted, Looe, R2 to original units. Looe matches the
+        # exact path's convention: sum-of-squared standardized LOO
+        # residuals times y.init.sd.
+        yfitted <- as.matrix(yfitted_std * y.init.sd + y.init.mean)
+        Looe    <- nys$Looe_std * y.init.sd
+        R2      <- 1 - (var(y.init - yfitted) / (y.init.sd^2))
+
+        binaryindicator <- matrix(FALSE, 1, d)
+        colnames(binaryindicator) <- colnames(X)
+
+        z <- list(
+          K                  = NULL,           # not stored: memory win
+          coeffs             = alpha,
+          Looe               = Looe,
+          fitted             = yfitted,
+          X                  = X.init,
+          y                  = y.init,
+          sigma              = sigma,
+          lambda             = lambda,
+          R2                 = R2,
+          derivatives        = derivmat,
+          avgderivatives     = avgderiv,
+          var.avgderivatives = varavgderivmat,
+          vcov.c             = if (vcov) (y.init.sd^2) * vcovmatc else NULL,
+          vcov.fitted        = NULL,
+          binaryindicator    = binaryindicator,
+          # Nystrom-specific fields
+          approx             = "nystrom",
+          landmarks          = nys$landmarks,
+          landmark_indices   = nys$landmark_indices,
+          nystrom_m          = nys$nystrom_m,
+          nystrom_eps        = nys$nystrom_eps,
+          W_eigen            = nys$W_eigen,
+          Dinvsqrt           = nys$Dinvsqrt,
+          inference          = if (vcov) "conditional_nystrom" else "none"
+        )
+        class(z) <- "krls"
+
+        if (derivative && binary) {
+          z <- fdskrls(z)
+        }
+
+        if (print.level > 0 && derivative) {
+          output <- setNames(as.vector(z$avgderivatives),
+                             colnames(z$avgderivatives))
+          cat("\n Average Marginal Effects:\n \n")
+          print(output)
+          cat("\n Quartiles of Marginal Effects:\n \n")
+          print(apply(z$derivatives, 2, quantile, probs = c(.25, .5, .75)))
+        }
+
+        return(z)
+      }
+
       # kernel matrix
       K <- NULL
       if(whichkernel=="gaussian"){ K <- gausskernel(X,sigma=sigma)}
@@ -128,7 +247,7 @@ function(     X=NULL,
       # default lambda is chosen by leave-one-out optimization (golden section search)
       if (is.null(lambda)) {
        noisy <- print.level > 2
-       lambda <- lambdasearch(L=L,U=U,y=y,Eigenobject=Eigenobject,eigtrunc=eigtrunc,noisy=noisy)
+       lambda <- lambdasearch(L=L,U=U,y=y,Eigenobject=Eigenobject,tol=tol,eigtrunc=eigtrunc,noisy=noisy)
          
        if(print.level>1) { cat("Lambda that minimizes Loo-Loss is:",round(lambda,5),"\n")}    
        
@@ -156,9 +275,9 @@ function(     X=NULL,
         } else {
           # eigentruncation: keep only eigenvectors at least 'eigtrunc' times as large as the largest
           lastkeeper <- max(which(Eigenobject$values >= eigtrunc * Eigenobject$values[1]))
-          vcovmatc <- tcrossprod(multdiag(X = Eigenobject$vectors[, 1:lastkeeper],
+          vcovmatc <- tcrossprod(multdiag(X = Eigenobject$vectors[, 1:lastkeeper, drop = FALSE],
                                           d = sigmasq * (Eigenobject$values[1:lastkeeper] + lambda)^-2),
-                                 Eigenobject$vectors[, 1:lastkeeper])
+                                 Eigenobject$vectors[, 1:lastkeeper, drop = FALSE])
         }
 
         # var-covar for y hats
@@ -194,8 +313,13 @@ function(     X=NULL,
          L <-  distk*K
          # pointwise derivatives
          derivmat[,k] <- (-2/sigma)*L%*%out$coeff
-         # variance for average derivative
-         varavgderivmat[1,k] <- (1/n^2)*sum((-2/sigma)^2 * crossprod(L,vcovmatc%*%L))     
+         # variance for average derivative.
+         # Identity: sum(L' V L) = (L 1)' V (L 1) where 1 is the all-ones
+         # vector. Reduces this from O(n^3) to O(n^2) per predictor without
+         # materializing the full L' V L product.
+         r <- rowSums(L)
+         varavgderivmat[1,k] <- (1/n^2) * (-2/sigma)^2 *
+           as.numeric(crossprod(r, vcovmatc %*% r))
       }
        # avg derivatives
        avgderiv <- matrix(colMeans(derivmat),nrow=1)
@@ -263,4 +387,3 @@ function(     X=NULL,
   return(z)
             
 }
-

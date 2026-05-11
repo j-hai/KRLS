@@ -1,3 +1,64 @@
+# KRLS 1.4-0
+
+## New: Nystrom approximation with conditional approximate inference
+
+* `krls(..., approx = "nystrom")` adds an explicitly approximate
+  low-rank fit path for larger data. The approximation uses landmark
+  points, a stabilized Nystrom feature map, and an `m`-space ridge
+  solve. Time becomes O(N m^2 + m^3) and memory O(N m), making KRLS
+  feasible at sample sizes well beyond the exact path's ~5000-row
+  ceiling.
+* Five new arguments: `approx`, `nystrom_m` (default
+  `min(500, ceiling(sqrt(N)))`), `landmarks`, `landmark_method`
+  (`"random"` implemented; `"kmeans"` reserved for a future release),
+  `nystrom_eps` (relative-ridge stabilization of W).
+* `landmarks` accepts three forms: `NULL` (auto-select),
+  an integer vector of row indices into `X`, or an `m` by `D`
+  numeric matrix in the original `X` units (standardized internally).
+* When `vcov = TRUE`, Nystrom fits report conditional approximate
+  standard errors for coefficient weights, predictions, and average
+  derivatives. These standard errors condition on the selected
+  landmarks, fixed `lambda`, and the low-rank feature approximation
+  -- they are not equivalent to exact KRLS standard errors. The full
+  `N x N` fitted-value covariance matrix is not stored, preserving
+  the memory benefit of the approximation. A new `inference` field
+  on the fit object reports `"conditional_nystrom"` or `"none"`.
+* `predict(fit, ..., se.fit = TRUE)` works under Nystrom when the fit
+  was built with `vcov = TRUE`.
+* `summary()`, `tidy()`, and `fdskrls()` (binary first-differences)
+  handle Nystrom fits cleanly, with or without standard errors.
+* Bootstrap calibration of the AME standard-error formula is included
+  in `dev/03_nystrom_bootstrap_validation.R` (developer-side check,
+  not shipped to CRAN).
+
+## Faster: O(n^2) AME-variance computation
+
+* The variance of the average marginal effect for each predictor is
+  now computed via the algebraic identity `sum(L' V L) = (L 1)' V (L 1)`,
+  reducing the per-predictor work from O(n^3) to O(n^2) without
+  materializing the full `L' V L` product. The default `krls()` call
+  is roughly 1.2x to 3x faster on moderate-to-large fits (n in the
+  few hundred to a few thousand range), with the largest gains where
+  the variance computation dominated the runtime.
+* Numerical results are bit-identical to KRLS 1.2-0 for every fit
+  quantity except `var.avgderivatives`, which differs by ~1e-15
+  (machine precision; an irreducible side effect of the change in
+  summation order). All other quantities — `coeffs`, `fitted`,
+  `lambda`, `R2`, `Looe`, `derivatives`, `avgderivatives`, `vcov.c` —
+  are bit-for-bit identical.
+
+## Bug fixes
+
+* `krls()` now correctly propagates the user-supplied `tol` argument
+  to `lambdasearch()`. Previously, `krls(X, y, tol = ...)` silently
+  ignored `tol` and used the default convergence tolerance; calling
+  `lambdasearch()` directly worked as documented.
+* `solveforc()` and the variance-covariance construction in `krls()`
+  no longer error when `eigtrunc` is aggressive enough to keep only
+  a single eigenvector. The single-column subset of `Eigenobject$vectors`
+  is now extracted with `drop = FALSE`, preserving its matrix shape
+  for downstream `multdiag()` / `tcrossprod()`.
+
 # KRLS 1.2-0
 
 ## New: formula interface

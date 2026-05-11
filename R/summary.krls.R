@@ -1,65 +1,74 @@
 summary.krls <-
 function(object, probs=c(.25,.5,.75),...)
       {
-            
+
         if (!inherits(object, "krls")) {
           stop("object is not of class 'krls'")
         }
-        
+
         cat("* *********************** *\n")
         cat("Model Summary:\n\n")
         cat("R2:",object$R2,"\n\n")
-        
+
         d <- ncol(object$X)
         n <- nrow(object$X)
-        
+
         coefficients <- matrix(NA,d,0)
-        rownames(coefficients) <- colnames(object$X) 
-                
-       
+        rownames(coefficients) <- colnames(object$X)
+
+
         if(is.null(object$derivatives)){
           cat("\n")
           cat("recompute krls object with krls(...,derivative = TRUE) to get summary of marginal effects\n")
           return(invisible(NULL))
-        } 
-        
-        # average marginal effects  
+        }
+
+        # average marginal effects
         est     <- t(object$avgderivatives)
-        se     <- sqrt(t(object$var.avgderivatives))
-        tval   <- est/se
-        avgcoefficients <- cbind(est, se, tval, 2 * pt(abs(tval),n-d, lower.tail = FALSE))
-        colnames(avgcoefficients) <- c("Est", "Std. Error", "t value", "Pr(>|t|)")
-        
-       # add stars for binary    
-        if(sum(object$binaryindicator)>0){         
+        has_se  <- !is.null(object$var.avgderivatives)
+        if (has_se) {
+          se   <- sqrt(t(object$var.avgderivatives))
+          tval <- est/se
+          avgcoefficients <- cbind(est, se, tval,
+                                   2 * pt(abs(tval), n - d, lower.tail = FALSE))
+          colnames(avgcoefficients) <- c("Est", "Std. Error", "t value", "Pr(>|t|)")
+        } else {
+          # No variances available (e.g. approx = "nystrom"); print point
+          # estimates only.
+          avgcoefficients <- est
+          colnames(avgcoefficients) <- "Est"
+        }
+
+       # add stars for binary
+        if(sum(object$binaryindicator)>0){
           rownames(avgcoefficients)[object$binaryindicator] <- paste(rownames(avgcoefficients)[object$binaryindicator],"*",sep="")
         }
-        
+
         cat("Average Marginal Effects:\n")
         print(avgcoefficients,...)
         if(sum(object$binaryindicator)>0){
         cat("\n(*) average dy/dx is for discrete change of dummy variable from min to max (i.e. usually 0 to 1))\n\n")
         }
-        
+
         # quantiles of derivatives
         qderiv <- apply(object$derivatives,2,quantile,probs=probs)
-        if(sum(object$binaryindicator)>0){         
+        if(sum(object$binaryindicator)>0){
           colnames(qderiv)[object$binaryindicator] <- paste(colnames(qderiv)[object$binaryindicator],"*",sep="")
         }
         qderiv <- t(qderiv)
-        
+
         cat("\n")
         cat("Quartiles of Marginal Effects:\n")
         print(qderiv,...)
-        
+
         if(sum(object$binaryindicator)>0){
          cat("\n(*) quantiles of dy/dx is for discrete change of dummy variable from min to max (i.e. usually 0 to 1))\n\n")
         }
-                     
+
       ans <- list(
                  coefficients=avgcoefficients,
                  qcoefficients=qderiv)
-      class(ans) <- "summary.krls"  
+      class(ans) <- "summary.krls"
       return(invisible(ans))
 }
 

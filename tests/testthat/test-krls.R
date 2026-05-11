@@ -52,3 +52,23 @@ test_that("R 4.4+ deprecation warning is gone (regression test for 1.0-0)", {
   d <- make_linear_data()
   expect_no_warning(krls(X = d$X, y = d$y, print.level = 0))
 })
+
+test_that("user-supplied tol is honored by lambdasearch (regression for 1.3-0)", {
+  d <- make_nonlinear_data()
+  # A very loose tol terminates the golden-section search early at a
+  # different lambda than the default tight tol; if krls() drops tol
+  # on the floor, both fits get the same lambda.
+  fit_loose <- krls(X = d$X, y = d$y, tol = 1e9, print.level = 0)
+  fit_tight <- krls(X = d$X, y = d$y, print.level = 0)
+  expect_false(isTRUE(all.equal(fit_loose$lambda, fit_tight$lambda)))
+})
+
+test_that("aggressive eigtrunc that keeps a single eigenvector works", {
+  d <- make_nonlinear_data()
+  # eigtrunc = 0.99999 keeps only the largest eigenvector; the
+  # single-column subset must not drop to a numeric vector or
+  # solveforc() / vcovmatc construction fails inside multdiag().
+  expect_no_error(
+    krls(X = d$X, y = d$y, eigtrunc = 0.99999, print.level = 0)
+  )
+})

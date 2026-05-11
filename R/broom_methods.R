@@ -11,11 +11,22 @@ function(x, conf.int = TRUE, conf.level = 0.95, ...)
       stop("\n tidy() requires marginal effects; refit with krls(..., derivative = TRUE)\n")
 
     est <- as.numeric(x$avgderivatives)
-    se  <- sqrt(as.numeric(x$var.avgderivatives))
     n   <- nrow(x$X); d <- ncol(x$X)
     df  <- max(n - d, 1)
-    tval <- est / se
-    pval <- 2 * stats::pt(abs(tval), df, lower.tail = FALSE)
+
+    # Standard errors / inference are only available when derivative
+    # variances were computed. If they are absent (e.g. vcov=FALSE),
+    # keep stable inference columns filled with NA.
+    has_se <- !is.null(x$var.avgderivatives)
+    if (has_se) {
+      se   <- sqrt(as.numeric(x$var.avgderivatives))
+      tval <- est / se
+      pval <- 2 * stats::pt(abs(tval), df, lower.tail = FALSE)
+    } else {
+      se   <- rep(NA_real_, length(est))
+      tval <- rep(NA_real_, length(est))
+      pval <- rep(NA_real_, length(est))
+    }
 
     out <- data.frame(
       term      = colnames(x$X),
@@ -27,9 +38,14 @@ function(x, conf.int = TRUE, conf.level = 0.95, ...)
     )
 
     if (isTRUE(conf.int)) {
-      crit <- stats::qt(1 - (1 - conf.level) / 2, df)
-      out$conf.low  <- est - crit * se
-      out$conf.high <- est + crit * se
+      if (has_se) {
+        crit <- stats::qt(1 - (1 - conf.level) / 2, df)
+        out$conf.low  <- est - crit * se
+        out$conf.high <- est + crit * se
+      } else {
+        out$conf.low  <- NA_real_
+        out$conf.high <- NA_real_
+      }
     }
 
     # Pointwise distribution summaries (the unique KRLS contribution)
