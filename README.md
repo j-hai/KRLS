@@ -55,21 +55,45 @@ pr$fit
 pr$se.fit
 ```
 
-## What's new in 1.1-0
+## Scaling to large n: Nyström approximation
 
-* Fixed an R 4.4+ deprecation that fired twice on every fit
-  (`Eigenobject$values + lambda` recycled a 1×1 matrix from
-  `lambdasearch()`). Numerical results are unchanged.
-* `plot.krls()` no longer dispatches the wrong S3 generic on bad
-  input. All three S3 methods now `stop()` cleanly and use
-  `inherits()` for the class check.
-* DESCRIPTION modernized (`Authors@R`, `Imports`, `Suggests`,
-  `BugReports`, GitHub `URL`, DOI in description).
-* Several typos fixed in error messages.
-* New `tests/testthat/` suite covering `krls()`, `predict()`,
-  `summary()`, helpers, and the deprecation regression.
-* GitHub Actions CI on macOS / Windows / Ubuntu × release + devel
-  + oldrel-1.
+For samples where the exact $n \times n$ kernel matrix is
+uncomfortable (typically past $n \approx 5{,}000$), KRLS offers an
+explicit low-rank alternative since version 1.4-0:
+
+```r
+fit <- krls(X = X, y = y, approx = "nystrom")
+```
+
+Same interface, same fit object, same `summary()` / `predict()` /
+`tidy()` outputs — including standard errors for predictions and
+average marginal effects. Time becomes $O(n m^2 + m^3)$ and memory
+$O(n m)$ with $m = \min(500, \lceil\sqrt{n}\rceil)$ landmarks by
+default. See `vignette("krls-nystrom-scaling")` for a timing
+comparison, the landmark-reuse pattern via `get_landmarks()`, and
+the LOO-vs-GCV trade-off for selecting $\lambda$.
+
+## What's new since 1.1-0
+
+* **`approx = "nystrom"` (1.4-0)** — explicit low-rank fit path
+  with analytical SEs for predictions and AMEs. Random and k-means
+  landmark selection.
+* **AME-variance optimization (1.4-0)** — row-sum rewrite reduces
+  per-predictor work from $O(n^3)$ to $O(n^2)$; default `krls()`
+  is 1.2–3× faster at moderate $n$, bit-identical results.
+* **`get_landmarks()` accessor and diagnostic-rich `summary()` /
+  `glance()` (1.4-1)** — extract landmarks for sensitivity-check
+  refits without the standardize-twice gotcha; surface
+  approximation diagnostics.
+* **`lambda_method = "gcv"` (1.5-0)** — closed-form GCV alternative
+  to the historical leave-one-out criterion. Default stays
+  `"loo"`.
+* **Nyström scaling vignette (1.5-0)** — exact-vs-Nyström timing,
+  landmark reuse, LOO-vs-GCV.
+* **Bug fixes (1.4-1, 1.5-1, 1.5-2)** — `tol` propagation,
+  eigtrunc single-eigenvector path, Nyström at $m = 1$, k-means
+  with $m = n$, GCV print label, clear error when the cross-kernel
+  underflows.
 
 See [`NEWS.md`](NEWS.md) for the full change log.
 
