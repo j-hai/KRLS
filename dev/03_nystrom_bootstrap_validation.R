@@ -19,12 +19,20 @@
 # (roughly 5% for B = 200). A consistent gap of more than ~10% across
 # predictors would point to a bug in the variance derivation.
 
-suppressPackageStartupMessages(library(KRLS))
+# Validate the source tree rather than any stale installed package.
+if (requireNamespace("pkgload", quietly = TRUE)) {
+  pkgload::load_all(quiet = TRUE)
+} else {
+  suppressPackageStartupMessages(library(KRLS))
+  message("pkgload not available; falling back to installed KRLS ",
+          packageVersion("KRLS"))
+}
 
 run_check <- function(n = 300, m = 40, d = 3, sigma_noise = 0.3,
                       B = 200, seed = 20260511L) {
   set.seed(seed)
   X <- matrix(rnorm(n * d), n, d)
+  colnames(X) <- paste0("x", seq_len(d))
   true_f <- function(X) sin(X[, 1]) + 0.3 * X[, 2] + 0.05 * X[, 3]^2
   y <- true_f(X) + rnorm(n, sd = sigma_noise)
 
@@ -48,10 +56,10 @@ run_check <- function(n = 300, m = 40, d = 3, sigma_noise = 0.3,
   boot_sd <- apply(amebs, 2, sd)
 
   data.frame(
-    predictor   = colnames(X),
-    reported_SE = round(reported_se, 5),
+    predictor    = colnames(X),
+    reported_SE  = round(reported_se, 5),
     bootstrap_SD = round(boot_sd, 5),
-    ratio       = round(boot_sd / reported_se, 3)
+    ratio        = round(boot_sd / reported_se, 3)
   )
 }
 

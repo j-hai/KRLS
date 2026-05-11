@@ -106,8 +106,12 @@ object; if a matrix is supplied, only the matrix is stored.
 \item{landmark_method}{
 String selecting the auto-selection rule for landmarks when
 \code{landmarks = NULL}. \code{"random"} (the default) samples uniformly
-without replacement; \code{"kmeans"} is reserved for a future release and
-currently signals an error.
+without replacement and is bit-reproducible under \code{set.seed()}.
+\code{"kmeans"} runs \code{stats::kmeans()} on the standardized
+predictors and uses cluster centers as landmarks -- typically more
+robust on imbalanced predictor distributions, but only approximately
+reproducible across R versions because the algorithm's initialization
+is implementation-dependent.
 }
 
 \item{nystrom_eps}{

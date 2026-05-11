@@ -61,6 +61,15 @@
       # landmarks without further transformation. Not bit-stable
       # across R versions even under set.seed() because of the
       # Hartigan-Wong algorithm's initialization; documented.
+      #
+      # stats::kmeans() requires centers < n; when m == n we
+      # short-circuit to every row as its own cluster (the degenerate
+      # "kmeans" answer).
+      if (nystrom_m == n) {
+        return(list(indices = seq_len(n),
+                    matrix  = X_std,
+                    method_used = "kmeans"))
+      }
       km <- stats::kmeans(X_std, centers = nystrom_m, nstart = 10L,
                           iter.max = 50L)
       Z  <- unname(km$centers)
@@ -120,22 +129,44 @@
   exp(-D2 / sigma)
 }
 
-## Bound-finding for the Nystrom lambda search. Mirrors lambdasearch()'s
-## heuristic but operates on the m-space ridge spectrum (Sigma^2 of Phi),
-## not the full-K spectrum.
+## Bound-finding for the Nystrom lambda search. The exact-path heuristic
+## in `lambdasearch()` walks U down from n until EDF >= 1; that
+## assumes the spectrum can supply at least one full effective degree
+## of freedom. For Nystrom with small m (e.g. m = 1, where max EDF is
+## also 1) the heuristic collapses to U = 0 and the search runs over a
+## degenerate near-zero interval.
+##
+## Here we instead anchor U at the dominant landmark eigenvalue (which
+## corresponds to "heavily regularized" relative to the data scale) and
+## grow it if needed to drive total EDF below 1. L starts at machine
+## epsilon and grows until effective dimensionality approaches the
+## quantile-defined target -- matching the spirit of `lambdasearch()`
+## but never decrementing below eps.
 .nystrom_lambda_bounds <- function(Sigma2, n, L, U) {
+  Smax <- max(Sigma2)
   if (is.null(U)) {
-    U <- n
-    while (sum(Sigma2 / (Sigma2 + U)) < 1) U <- U - 1
+    U <- Smax
+    # Grow U until EDF drops below 1 (well-regularized). Bounded so the
+    # loop terminates even on pathological spectra.
+    iter <- 0L
+    while (sum(Sigma2 / (Sigma2 + U)) >= 1 && iter < 200L) {
+      U <- U * 2
+      iter <- iter + 1L
+    }
   } else {
     stopifnot(is.numeric(U), length(U) == 1L, U > 0)
   }
   if (is.null(L)) {
-    q <- which.min(abs(Sigma2 - (max(Sigma2) / 1000)))
+    q <- which.min(abs(Sigma2 - (Smax / 1000)))
     L <- .Machine$double.eps
-    while (sum(Sigma2 / (Sigma2 + L)) > q) L <- L + 0.05
+    while (sum(Sigma2 / (Sigma2 + L)) > q && L < Smax) L <- L + 0.05
   } else {
     stopifnot(is.numeric(L), length(L) == 1L, L >= 0)
+  }
+  if (!(L < U)) {
+    stop("Nystrom lambda-search bounds collapsed to L >= U (L = ",
+         signif(L, 3), ", U = ", signif(U, 3),
+         "); try supplying L and U explicitly")
   }
   list(L = L, U = U)
 }

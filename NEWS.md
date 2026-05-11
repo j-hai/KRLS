@@ -1,3 +1,29 @@
+# KRLS 1.5-1
+
+Bug-fix patch for the Nystrom path that landed in 1.4-0 / 1.4-1.
+
+## Fixes
+
+* Nystrom lambda search at small `nystrom_m` (notably `m = 1`) no
+  longer collapses. The previous bound heuristic could only satisfy
+  `EDF >= 1` at `U = 0`, leaving the golden-section search running
+  over a near-zero interval and selecting an essentially unregularized
+  lambda. The bound logic now anchors at the dominant landmark
+  eigenvalue and grows U as needed; the search runs over a usable
+  window for every supported m.
+* `landmark_method = "kmeans"` now handles `nystrom_m == nrow(X)`
+  by short-circuiting to one cluster per row, instead of letting
+  `stats::kmeans()` error on `centers >= n`.
+* When `lambda_method = "gcv"` and `print.level > 1`, both backends
+  now correctly label the printed scalar as the GCV minimum (was
+  hard-coded as "Loo-Loss").
+* `man/krls.Rd` no longer claims `landmark_method = "kmeans"` is
+  reserved for a future release; it documents the actual behavior.
+* `dev/03_nystrom_bootstrap_validation.R` assigns column names to its
+  simulated X and prefers `pkgload::load_all()` when available so the
+  script validates the source tree rather than a stale installed
+  package.
+
 # KRLS 1.5-0
 
 ## New: `lambda_method = "gcv"`

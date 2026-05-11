@@ -294,6 +294,32 @@ test_that("L >= U lambda-window is rejected", {
                "L must be strictly less than U")
 })
 
+test_that("Nystrom m = 1 picks a sensible lambda (regression for 1.5-1)", {
+  # With m = 1 the historical heuristic (decrement U while EDF < 1)
+  # collapses to U = 0 and the search ran near machine epsilon,
+  # producing a wildly under-regularized fit.
+  d <- make_nonlinear_data(N = 80)
+  fit_loo <- krls(d$X, d$y, approx = "nystrom", nystrom_m = 1L,
+                  lambda_method = "loo", print.level = 0)
+  fit_gcv <- krls(d$X, d$y, approx = "nystrom", nystrom_m = 1L,
+                  lambda_method = "gcv", print.level = 0)
+  expect_true(fit_loo$lambda > 1e-6)
+  expect_true(fit_gcv$lambda > 1e-6)
+})
+
+test_that("Nystrom kmeans handles m == n (regression for 1.5-1)", {
+  # stats::kmeans() requires centers < n; m == n is a degenerate but
+  # legal request. Short-circuit to using every row.
+  d <- make_nonlinear_data(N = 40)
+  expect_no_error(
+    fit <- krls(d$X, d$y, approx = "nystrom",
+                nystrom_m = nrow(d$X),
+                landmark_method = "kmeans", print.level = 0)
+  )
+  expect_equal(fit$nystrom_m, 40L)
+  expect_equal(fit$landmark_method, "kmeans")
+})
+
 test_that("lambda_method = 'gcv' under Nystrom produces a plausible fit", {
   d <- make_nonlinear_data(N = 200)
   fit_loo <- krls(d$X, d$y, approx = "nystrom", nystrom_m = 40,
