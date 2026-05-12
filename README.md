@@ -25,6 +25,11 @@ install.packages("KRLS")
 remotes::install_github("j-hai/KRLS")
 ```
 
+## Documentation
+
+- [Project page](https://web.stanford.edu/~jhain/projects/10_project_krls/) — package overview and current release notes.
+- [Explainer](https://web.stanford.edu/~jhain/projects/kernel-regularized-least-squares-explainer/) — a self-contained tutorial on what KRLS gives you that OLS doesn't, with worked examples in R and Stata.
+
 ## Quick start
 
 ```r
