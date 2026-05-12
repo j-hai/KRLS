@@ -13,11 +13,12 @@ function(     X=NULL,
               tol=NULL,
 							eigtrunc=NULL,
               data=NULL,
-              approx=c("none","nystrom"),
+              approx=c("auto","none","nystrom"),
               nystrom_m=NULL,
               landmarks=NULL,
               landmark_method=c("random","kmeans"),
               nystrom_eps=sqrt(.Machine$double.eps),
+              landmark_seed=NULL,
               lambda_method=c("loo","gcv")){
 
       approx          <- match.arg(approx)
@@ -137,6 +138,35 @@ function(     X=NULL,
       X <- scale(X,center=TRUE,scale=X.init.sd)
       y <- scale(y,center=y.init.mean,scale=y.init.sd)
 
+      # ---- auto-dispatch ----------------------------------------------------
+      # `approx = "auto"` (the default) uses the exact path when the
+      # sample size doesn't exceed the would-be landmark count, and
+      # switches to the Nystrom approximation otherwise (with a
+      # one-line notice so the choice is visible at the call site).
+      # "none" forces the exact path; "nystrom" forces the approximation.
+      if (approx == "auto") {
+        if (whichkernel != "gaussian" || !is.null(eigtrunc) ||
+            (derivative == TRUE && vcov == FALSE)) {
+          # Conditions that aren't supported under approx = "nystrom"
+          # fall through to the exact path silently.
+          approx <- "none"
+        } else {
+          effective_m <- if (is.null(nystrom_m)) min(500L, n)
+                         else as.integer(nystrom_m)
+          if (n > effective_m) {
+            approx <- "nystrom"
+            # message() so users still see the dispatch decision under
+            # print.level = 0; suppress with suppressMessages() if
+            # truly silent operation is needed.
+            message("krls: N = ", n, " exceeds nystrom_m = ",
+                    effective_m, "; using approx = \"nystrom\". ",
+                    "Set approx = \"none\" to force the exact path.")
+          } else {
+            approx <- "none"
+          }
+        }
+      }
+
       # ---- Nystrom approximation path ---------------------------------------
       # An explicit low-rank approximation. When vcov=TRUE, inference is
       # conditional on the selected landmarks and low-rank feature map.
@@ -153,7 +183,8 @@ function(     X=NULL,
         landmarks_resolved <- .resolve_landmarks(landmarks, landmark_method,
                                                  nystrom_m, X,
                                                  colMeans(X.init),
-                                                 X.init.sd)
+                                                 X.init.sd,
+                                                 landmark_seed)
         noisy <- print.level > 2
         nys <- .fit_krls_nystrom(X, y, sigma, landmarks_resolved,
                                  lambda, nystrom_eps,

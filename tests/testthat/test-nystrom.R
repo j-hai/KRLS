@@ -340,6 +340,71 @@ test_that("Nystrom kmeans handles m == n (regression for 1.5-1)", {
   expect_equal(fit$landmark_method, "kmeans")
 })
 
+test_that("approx = 'auto' (the default) picks exact at small n", {
+  d <- make_nonlinear_data(N = 100)
+  fit <- krls(d$X, d$y, print.level = 0)
+  # No approx field set on the fit object => exact path.
+  expect_null(fit$approx)
+  expect_false(is.null(fit$K))   # exact path stores full kernel
+})
+
+test_that("approx = 'auto' switches to Nystrom when N > effective m", {
+  set.seed(1); n <- 600
+  X <- matrix(rnorm(n*2), n, 2); y <- sin(X[, 1]) + rnorm(n, sd = 0.2)
+  expect_message(
+    fit <- krls(X, y, print.level = 0),
+    "exceeds nystrom_m"
+  )
+  expect_equal(fit$approx, "nystrom")
+  expect_equal(fit$nystrom_m, 500L)
+})
+
+test_that("approx = 'none' forces exact even at large n", {
+  set.seed(1); n <- 600
+  X <- matrix(rnorm(n*2), n, 2); y <- sin(X[, 1]) + rnorm(n, sd = 0.2)
+  fit <- krls(X, y, approx = "none", print.level = 0)
+  expect_null(fit$approx)
+  expect_false(is.null(fit$K))
+})
+
+test_that("default nystrom_m is min(500, n)", {
+  set.seed(1); n <- 800
+  X <- matrix(rnorm(n*2), n, 2); y <- sin(X[, 1]) + rnorm(n, sd = 0.2)
+  fit <- suppressMessages(
+    krls(X, y, approx = "nystrom", print.level = 0)
+  )
+  expect_equal(fit$nystrom_m, 500L)
+})
+
+test_that("landmark_seed reproduces landmarks and preserves caller RNG", {
+  d <- make_nonlinear_data(N = 200)
+
+  # Same landmark_seed, different outer seed => same landmarks.
+  # Use nystrom_m strictly less than N so the seed actually affects
+  # which subset is drawn.
+  set.seed(11); a <- krls(d$X, d$y, approx = "nystrom",
+                          nystrom_m = 40,
+                          landmark_seed = 42, print.level = 0)
+  set.seed(99); b <- krls(d$X, d$y, approx = "nystrom",
+                          nystrom_m = 40,
+                          landmark_seed = 42, print.level = 0)
+  expect_equal(a$landmark_indices, b$landmark_indices)
+
+  # Different landmark_seed => different landmarks.
+  c_fit <- krls(d$X, d$y, approx = "nystrom",
+                nystrom_m = 40,
+                landmark_seed = 7, print.level = 0)
+  expect_false(identical(a$landmark_indices, c_fit$landmark_indices))
+
+  # Caller's RNG state is preserved across the krls() call.
+  set.seed(7); before <- runif(3)
+  set.seed(7); krls(d$X, d$y, approx = "nystrom",
+                    nystrom_m = 40,
+                    landmark_seed = 42, print.level = 0)
+  after <- runif(3)
+  expect_equal(before, after)
+})
+
 test_that("lambda_method = 'gcv' under Nystrom produces a plausible fit", {
   d <- make_nonlinear_data(N = 200)
   fit_loo <- krls(d$X, d$y, approx = "nystrom", nystrom_m = 40,

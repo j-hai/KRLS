@@ -17,6 +17,29 @@
   sort.int(sample.int(n, m))
 }
 
+## Run `expr` with the RNG temporarily seeded at `seed`, restoring the
+## caller's .Random.seed (or its absence) on exit. Used so that
+## passing `landmark_seed` to krls() does NOT perturb the user's
+## downstream RNG state -- e.g. in simulations where the caller has
+## set their own seed and any silent re-seeding would shift subsequent
+## draws.
+.with_seed <- function(seed, expr) {
+  if (is.null(seed)) return(expr)
+  had_seed <- exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
+  old_seed <- if (had_seed) get(".Random.seed", envir = .GlobalEnv,
+                                inherits = FALSE) else NULL
+  on.exit({
+    if (had_seed) {
+      assign(".Random.seed", old_seed, envir = .GlobalEnv)
+    } else if (exists(".Random.seed", envir = .GlobalEnv,
+                      inherits = FALSE)) {
+      rm(".Random.seed", envir = .GlobalEnv)
+    }
+  })
+  set.seed(seed)
+  expr
+}
+
 .validate_nystrom_m <- function(nystrom_m, n) {
   if (!is.numeric(nystrom_m) || length(nystrom_m) != 1L ||
       is.na(nystrom_m) || !is.finite(nystrom_m) ||
@@ -46,41 +69,52 @@
 ## coordinates and standardized with the same centers/scales so they live
 ## in the same kernel space the model uses internally.
 .resolve_landmarks <- function(landmarks, landmark_method, nystrom_m,
-                               X_std, X_centers, X_scales) {
+                               X_std, X_centers, X_scales,
+                               landmark_seed = NULL) {
   n <- nrow(X_std)
   d <- ncol(X_std)
 
   if (is.null(landmarks)) {
     if (is.null(nystrom_m)) {
-      nystrom_m <- min(500L, as.integer(ceiling(sqrt(n))))
+      # Default scales up to 500 landmarks; cheap to compute even
+      # at large n and gives a much better approximation than the
+      # historical sqrt(n) heuristic at moderate n.
+      nystrom_m <- min(500L, n)
     }
     nystrom_m <- .validate_nystrom_m(nystrom_m, n)
-    if (landmark_method == "kmeans") {
-      # k-means on standardized X. Centers come back in the same
-      # standardized space, so they slot in alongside index-form
-      # landmarks without further transformation. Not bit-stable
-      # across R versions even under set.seed() because of the
-      # Hartigan-Wong algorithm's initialization; documented.
-      #
-      # stats::kmeans() requires centers < n; when m == n we
-      # short-circuit to every row as its own cluster (the degenerate
-      # "kmeans" answer).
-      if (nystrom_m == n) {
-        return(list(indices = seq_len(n),
-                    matrix  = X_std,
-                    method_used = "kmeans"))
+    # Stochastic landmark selection (kmeans or random) is wrapped in
+    # .with_seed() so that a non-NULL landmark_seed seeds locally
+    # without disturbing the caller's global RNG state.
+    return(.with_seed(landmark_seed, {
+      if (landmark_method == "kmeans") {
+        # k-means on standardized X. Centers come back in the same
+        # standardized space, so they slot in alongside index-form
+        # landmarks without further transformation. Not bit-stable
+        # across R versions even under set.seed() because of the
+        # Hartigan-Wong algorithm's initialization; documented.
+        #
+        # stats::kmeans() requires centers < n; when m == n we
+        # short-circuit to every row as its own cluster (the
+        # degenerate "kmeans" answer).
+        if (nystrom_m == n) {
+          list(indices = seq_len(n),
+               matrix  = X_std,
+               method_used = "kmeans")
+        } else {
+          km <- stats::kmeans(X_std, centers = nystrom_m,
+                              nstart = 10L, iter.max = 50L)
+          Z  <- unname(km$centers)
+          attr(Z, "kmeans_iter")  <- km$iter
+          attr(Z, "kmeans_tot")   <- km$tot.withinss
+          list(indices = NULL, matrix = Z, method_used = "kmeans")
+        }
+      } else {
+        idx <- .select_landmarks_random(n, nystrom_m)
+        list(indices = idx,
+             matrix  = X_std[idx, , drop = FALSE],
+             method_used = "random")
       }
-      km <- stats::kmeans(X_std, centers = nystrom_m, nstart = 10L,
-                          iter.max = 50L)
-      Z  <- unname(km$centers)
-      attr(Z, "kmeans_iter")  <- km$iter
-      attr(Z, "kmeans_tot")   <- km$tot.withinss
-      return(list(indices = NULL, matrix = Z, method_used = "kmeans"))
-    }
-    idx <- .select_landmarks_random(n, nystrom_m)
-    return(list(indices = idx,
-                matrix  = X_std[idx, , drop = FALSE],
-                method_used = "random"))
+    }))
   }
 
   if (is.numeric(landmarks) && is.null(dim(landmarks))) {

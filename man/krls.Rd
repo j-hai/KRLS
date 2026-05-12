@@ -11,9 +11,10 @@ Function implements Kernel-Based Regularized Least Squares (KRLS), a machine lea
 krls(X = NULL, y = NULL, whichkernel = "gaussian", lambda = NULL,
 sigma = NULL, derivative = TRUE, binary= TRUE, vcov=TRUE,
 print.level = 1,L=NULL,U=NULL,tol=NULL,eigtrunc=NULL,data=NULL,
-approx = c("none", "nystrom"), nystrom_m = NULL, landmarks = NULL,
-landmark_method = c("random", "kmeans"),
+approx = c("auto", "none", "nystrom"), nystrom_m = NULL,
+landmarks = NULL, landmark_method = c("random", "kmeans"),
 nystrom_eps = sqrt(.Machine$double.eps),
+landmark_seed = NULL,
 lambda_method = c("loo", "gcv"))
 }
 
@@ -70,27 +71,44 @@ Positive scalar that determines how much eignvalues should be trunacted for find
 }
 
 \item{approx}{
-String selecting the approximation regime. \code{"none"} (the default)
-uses the exact \var{N} by \var{N} kernel. \code{"nystrom"} uses a low-rank
-Nystrom approximation anchored at \var{m} landmark points: an explicit
-\var{m}-dimensional feature map replaces the full kernel and the ridge
-problem is solved in \var{m}-space. Time becomes \var{O(N m^2 + m^3)} and
-memory \var{O(N m)}, so KRLS becomes feasible at \var{N} well beyond the
-exact path's ~5000-row ceiling. When \code{vcov = TRUE}, coefficient,
-prediction, and average-derivative standard errors are computed as
-conditional approximate Nyström standard errors: they condition on the
-selected landmarks, fixed \eqn{\lambda}{lambda}, and the low-rank feature
-approximation. The full \var{N} by \var{N} fitted-value covariance matrix is
-not stored under \code{approx = "nystrom"}. Only the Gaussian kernel is
-supported under \code{approx = "nystrom"}.
+String selecting the approximation regime.
+
+\code{"auto"} (the default) uses the exact \var{N} by \var{N} kernel
+when the sample size does not exceed the would-be landmark count
+(\code{nystrom_m}, default \code{min(500, N)}), and switches to the
+Nystrom approximation otherwise. A one-line message is emitted when
+the switch happens, so the choice is visible at the call site.
+Conditions that are unsupported under Nystrom (non-Gaussian kernel,
+non-null \code{eigtrunc}, \code{derivative = TRUE} with
+\code{vcov = FALSE}) fall through to the exact path silently.
+
+\code{"none"} forces the exact path regardless of sample size; this
+is the historical KRLS behavior and gives identical fits to KRLS
+\eqn{\le}{<=} 1.5-2.
+
+\code{"nystrom"} forces the low-rank Nystrom approximation: an
+explicit \var{m}-dimensional feature map replaces the full kernel and
+the ridge problem is solved in \var{m}-space. Time becomes
+\var{O(N m^2 + m^3)} and memory \var{O(N m)}, so KRLS is feasible at
+\var{N} well beyond the exact path's ~5000-row ceiling. When
+\code{vcov = TRUE}, coefficient, prediction, and average-derivative
+standard errors are computed as conditional approximate Nystrom
+standard errors -- conditional on the selected landmarks, fixed
+\eqn{\lambda}{lambda}, and the low-rank feature approximation. The
+full \var{N} by \var{N} fitted-value covariance matrix is not stored.
+Only the Gaussian kernel is supported.
 }
 
 \item{nystrom_m}{
 Integer number of landmark points to use when \code{approx = "nystrom"}.
-Ignored otherwise. Default is \code{min(500, ceiling(sqrt(N)))}, a
-heuristic for which empirical accuracy is usually acceptable. Larger
-\code{nystrom_m} approaches exact KRLS at a quadratic cost; smaller
-trades fit quality for runtime/memory.
+Ignored otherwise. Default is \code{min(500, N)}, which keeps every
+row as a landmark for small samples and caps at 500 for larger ones.
+Larger \code{nystrom_m} approaches exact KRLS at a quadratic cost;
+smaller trades fit quality for runtime/memory. The internal
+approximation is \eqn{K \approx C\,W_{reg}^{-1}\,C^\top}{K = C
+W_reg^(-1) C'} where \eqn{C = K(X, Z)}{C = K(X, Z)},
+\eqn{W = K(Z, Z)}{W = K(Z, Z)}, and \eqn{W_{reg}}{W_reg} is \eqn{W}
+with eigenvalues floored at \code{nystrom_eps * max(eigenvalues of W)}.
 }
 
 \item{landmarks}{
@@ -122,6 +140,19 @@ before the feature map is built; this stabilizes the
 \eqn{W^{-1/2}}{W^(-1/2)} operation when landmarks are near-collinear in
 feature space. Documented as numerical stabilization, not a modeling
 parameter. Default is \code{sqrt(.Machine$double.eps)}.
+}
+
+\item{landmark_seed}{
+Optional integer seed used \emph{only} for landmark selection when
+\code{landmarks = NULL} and the chosen \code{landmark_method} is
+stochastic (random sampling or k-means). If supplied, the global
+\code{.Random.seed} is saved before landmark selection and restored
+on exit, so the caller's downstream RNG state is unaffected. This
+makes Nystrom fits bit-reproducible without forcing the user to
+remember a \code{set.seed()} call in their own code and without the
+silent-seed-reset failure mode that can plague simulations. Default
+is \code{NULL}, in which case landmark selection draws from
+whichever RNG state the caller has in effect.
 }
 
 \item{lambda_method}{

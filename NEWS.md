@@ -1,3 +1,48 @@
+# KRLS 1.6-0
+
+Refinements from Chad Hazlett's review of the Nystrom path. Three
+user-visible additions; one default-behavior change at large samples.
+
+## Auto-dispatch (`approx = "auto"` is now the default)
+
+* `krls()` now defaults to `approx = "auto"`, which uses the exact
+  path when `N <= nystrom_m` and switches to `approx = "nystrom"`
+  with a one-line `message()` when `N > nystrom_m`. The new behavior
+  benefits casual users who do not realize the Nystrom path exists,
+  while preserving the call-site honesty of an explicit
+  approximation flag.
+* `approx = "none"` forces the exact path regardless of `N` and
+  reproduces every KRLS <= 1.5-2 fit bit-for-bit. Users who need the
+  historical default for reproducibility should set this explicitly.
+* Conditions that aren't supported under Nystrom (non-Gaussian
+  kernel, non-null `eigtrunc`, `derivative = TRUE` with
+  `vcov = FALSE`) fall through to the exact path silently under
+  `approx = "auto"`.
+
+## Larger default `nystrom_m`
+
+* Default `nystrom_m` is now `min(500, N)` (was `min(500, ceiling(sqrt(N)))`).
+  The old `sqrt(N)` floor gave overly coarse approximations at moderate
+  `N` (e.g. `m = 100` at `N = 10000`) given how cheap the cached-SVD
+  Nystrom path is. The new default caps at 500 regardless and uses
+  every row as a landmark for small samples.
+
+## New `landmark_seed` argument with RNG-hygiene
+
+* `krls(..., landmark_seed = NULL)` lets users pin Nystrom landmark
+  selection without touching their global RNG state. When non-NULL,
+  `.Random.seed` is saved before landmark selection and restored on
+  exit, so the seed is consumed locally and the caller's downstream
+  draws are unaffected. Two krls() calls with the same `landmark_seed`
+  produce bit-identical landmarks regardless of the surrounding
+  `set.seed()` context.
+
+## Other
+
+* `man/krls.Rd` now states the Nystrom approximation explicitly as
+  `K ≈ C W_reg^{-1} C'` after the relative-ridge floor, matching the
+  internal implementation.
+
 # KRLS 1.5-2
 
 ## Fixes
