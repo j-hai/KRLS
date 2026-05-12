@@ -340,6 +340,46 @@ test_that("Nystrom kmeans handles m == n (regression for 1.5-1)", {
   expect_equal(fit$landmark_method, "kmeans")
 })
 
+test_that("derivative=TRUE/vcov=FALSE under approx='auto' (regression for 1.6-x)", {
+  # Pre-1.6-x the early derivative+vcov guard only fired under
+  # approx='none', so approx='auto' (the new default) bypassed it.
+  # When auto resolved to the exact path the user then hit a cryptic
+  # "object 'vcovmatc' not found" inside derivatives. The guard now
+  # re-runs after auto-dispatch and produces a clear message.
+  d <- make_nonlinear_data(N = 60)
+  expect_error(
+    krls(d$X, d$y, derivative = TRUE, vcov = FALSE, print.level = 0),
+    "vcov"
+  )
+  # Same combo under approx='nystrom' is supported (point-estimate
+  # derivatives, no SEs).
+  set.seed(1); n <- 600
+  X <- matrix(rnorm(n*2), n, 2); y <- sin(X[,1]) + rnorm(n, sd = 0.2)
+  fit <- suppressMessages(
+    krls(X, y, approx = "nystrom", derivative = TRUE, vcov = FALSE,
+         print.level = 0)
+  )
+  expect_equal(fit$approx, "nystrom")
+  expect_null(fit$var.avgderivatives)        # SEs intentionally absent
+  expect_false(is.null(fit$derivatives))     # point estimates present
+})
+
+test_that("auto-dispatch validates nystrom_m before printing (regression for 1.6-x)", {
+  # Bad nystrom_m used to get coerced inside the dispatch threshold
+  # comparison: Inf produced a cryptic NA-comparison error; 1.5
+  # printed an auto-switch message claiming nystrom_m = 1 *before*
+  # the real validator caught it. .validate_nystrom_m now runs first.
+  d <- make_nonlinear_data(N = 600)
+  expect_error(
+    krls(d$X, d$y, nystrom_m = Inf, print.level = 0),
+    "finite integer"
+  )
+  expect_error(
+    krls(d$X, d$y, nystrom_m = 1.5, print.level = 0),
+    "finite integer"
+  )
+})
+
 test_that("approx = 'auto' (the default) picks exact at small n", {
   d <- make_nonlinear_data(N = 100)
   fit <- krls(d$X, d$y, print.level = 0)

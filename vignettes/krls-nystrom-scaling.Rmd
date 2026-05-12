@@ -43,7 +43,7 @@ KRLS exposes this as an explicit approximation:
 krls(X, y, approx = "nystrom", nystrom_m = 100)
 ```
 
-Default landmark count is `min(500, ceiling(sqrt(n)))`. Inference (when
+Default landmark count is `min(500, n)`. Inference (when
 `vcov = TRUE`) is *conditional approximate* -- standard errors
 condition on the selected landmarks, fixed $\lambda$, and the low-rank
 feature map; they are not equivalent to exact KRLS inference.
@@ -79,14 +79,16 @@ for (i in seq_along(sizes)) {
   n <- sizes[i]
   tr <- make_data(n)
   te <- make_data(200)
-  m  <- ceiling(sqrt(n))
+  # Use the package default landmark count, min(500, n).
+  m  <- min(500L, n)
 
   t_e <- system.time({
-    fit_e <- krls(tr$X, tr$y, derivative = FALSE, vcov = FALSE,
+    fit_e <- krls(tr$X, tr$y, approx = "none",
+                  derivative = FALSE, vcov = FALSE,
                   print.level = 0)
   })["elapsed"]
   t_n <- system.time({
-    fit_n <- krls(tr$X, tr$y, approx = "nystrom", nystrom_m = m,
+    fit_n <- krls(tr$X, tr$y, approx = "nystrom",
                   derivative = FALSE, print.level = 0)
   })["elapsed"]
 
@@ -120,10 +122,11 @@ typical laptop. Nystrom keeps going:
 n  <- 2000
 tr <- make_data(n)
 te <- make_data(200)
-m  <- ceiling(sqrt(n))   # ~45 landmarks
+# Default is min(500, n) -- here 500 landmarks at n = 2000.
+m  <- min(500L, n)
 
 t_n <- system.time({
-  fit_big <- krls(tr$X, tr$y, approx = "nystrom", nystrom_m = m,
+  fit_big <- krls(tr$X, tr$y, approx = "nystrom",
                   derivative = FALSE, print.level = 0)
 })["elapsed"]
 

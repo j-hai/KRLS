@@ -68,7 +68,7 @@ fit <- krls(X = X, y = y, approx = "nystrom")
 Same interface, same fit object, same `summary()` / `predict()` /
 `tidy()` outputs — including standard errors for predictions and
 average marginal effects. Time becomes $O(n m^2 + m^3)$ and memory
-$O(n m)$ with $m = \min(500, \lceil\sqrt{n}\rceil)$ landmarks by
+$O(n m)$ with $m = \min(500, n)$ landmarks by
 default. See `vignette("krls-nystrom-scaling")` for a timing
 comparison, the landmark-reuse pattern via `get_landmarks()`, and
 the LOO-vs-GCV trade-off for selecting $\lambda$.

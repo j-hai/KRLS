@@ -92,11 +92,11 @@ function(     X=NULL,
                 is.logical(binary)
                 )
 
-      if(derivative==TRUE && approx == "none"){
-        if(vcov==FALSE){
-        stop("derivative==TRUE requires vcov=TRUE")
-        }
-      }
+      # (The derivative=TRUE / vcov=FALSE guard moved past the
+      # auto-dispatch block below: the constraint applies to the exact
+      # path but not to Nystrom, which returns point-estimate
+      # derivatives without SEs. We need to know which path approx
+      # will actually resolve to before enforcing the rule.)
 
       # If the user supplied both L and U for the lambda search, enforce
       # L < U up front; otherwise lambdasearch()'s golden-section step
@@ -144,15 +144,26 @@ function(     X=NULL,
       # switches to the Nystrom approximation otherwise (with a
       # one-line notice so the choice is visible at the call site).
       # "none" forces the exact path; "nystrom" forces the approximation.
+      #
+      # Note: derivative=TRUE with vcov=FALSE is *supported* under
+      # Nystrom (returns point estimates without SEs), so it does
+      # NOT fall through to the exact path here -- it would just
+      # produce a confusing "vcovmatc not found" error there.
       if (approx == "auto") {
-        if (whichkernel != "gaussian" || !is.null(eigtrunc) ||
-            (derivative == TRUE && vcov == FALSE)) {
-          # Conditions that aren't supported under approx = "nystrom"
+        if (whichkernel != "gaussian" || !is.null(eigtrunc)) {
+          # Conditions truly unsupported under approx = "nystrom"
           # fall through to the exact path silently.
           approx <- "none"
         } else {
-          effective_m <- if (is.null(nystrom_m)) min(500L, n)
-                         else as.integer(nystrom_m)
+          # Validate the user-supplied nystrom_m up front so bad
+          # values (NA, Inf, non-integer) produce a clean error
+          # rather than being silently coerced into the dispatch
+          # threshold or printed into the auto-switch message.
+          effective_m <- if (is.null(nystrom_m)) {
+            min(500L, n)
+          } else {
+            .validate_nystrom_m(nystrom_m, n)
+          }
           if (n > effective_m) {
             approx <- "nystrom"
             # message() so users still see the dispatch decision under
@@ -165,6 +176,18 @@ function(     X=NULL,
             approx <- "none"
           }
         }
+      }
+
+      # Re-run the derivative+vcov guard now that approx is resolved.
+      # The exact path requires vcovmatc to compute derivative SEs,
+      # so derivative=TRUE without vcov is invalid there. Nystrom
+      # does NOT have this constraint (it returns point estimates
+      # only when vcov=FALSE), so the guard only fires when we
+      # actually land on the exact path.
+      if (derivative == TRUE && vcov == FALSE && approx == "none") {
+        stop("derivative=TRUE requires vcov=TRUE under the exact path; ",
+             "set approx = \"nystrom\" for point-estimate derivatives ",
+             "without SEs")
       }
 
       # ---- Nystrom approximation path ---------------------------------------

@@ -1,3 +1,32 @@
+# KRLS 1.6-1
+
+Bug-fix patch on top of 1.6-0.
+
+## Fixes
+
+* `krls(derivative = TRUE, vcov = FALSE)` under the default
+  `approx = "auto"` no longer crashes with the cryptic
+  `object 'vcovmatc' not found`. The derivative+vcov guard was
+  previously only enforced under `approx = "none"` (pre-dispatch);
+  it now re-runs after the auto-dispatch resolves and produces a
+  clear error when the exact path is chosen. The same combination
+  remains supported under `approx = "nystrom"`, which returns
+  point-estimate derivatives without SEs.
+* Auto-dispatch now validates `nystrom_m` before using it as the
+  dispatch threshold or printing the switchover message. Previously
+  `nystrom_m = Inf` produced an opaque "missing value where
+  TRUE/FALSE needed", and `nystrom_m = 1.5` announced
+  `nystrom_m = 1` before the real validator caught it. Both now
+  error cleanly with the same "must be a finite integer" message.
+
+## Documentation
+
+* `README.md` and `vignette("krls-nystrom-scaling")` now describe
+  the default `nystrom_m` as `min(500, N)` (was still listed as the
+  pre-1.6-0 `min(500, ceiling(sqrt(N)))` heuristic). The scaling
+  vignette's benchmark code now uses the actual default rather than
+  `ceiling(sqrt(n))`.
+
 # KRLS 1.6-0
 
 Refinements from Chad Hazlett's review of the Nystrom path. Three
