@@ -1,4 +1,4 @@
-# KRLS 1.7-0 (in development)
+# KRLS 1.7-0
 
 Adds the two convention items deferred from Chad Hazlett's review of
 the 1.6 line: a `cat_columns` argument for kbal/GPSS-style one-hot
