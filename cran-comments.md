@@ -76,7 +76,7 @@ names and signatures from 1.0-0 are preserved.
 
 ### Test environments
 
-* macOS 14.6.1 (local), R 4.5.1
+* macOS 26.5 (Tahoe), aarch64, local — R 4.5.3 (2026-03-11)
 * win-builder R-devel and R-release (planned on submission)
 * r-hub macOS-release and ubuntu-release (planned on submission)
 
