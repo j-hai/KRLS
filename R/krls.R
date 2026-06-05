@@ -19,7 +19,8 @@ function(     X=NULL,
               landmark_method=c("random","kmeans"),
               nystrom_eps=sqrt(.Machine$double.eps),
               landmark_seed=NULL,
-              lambda_method=c("loo","gcv")){
+              lambda_method=c("loo","gcv"),
+              cat_columns=NULL){
 
       approx          <- match.arg(approx)
       landmark_method <- match.arg(landmark_method)
@@ -45,25 +46,43 @@ function(     X=NULL,
           stop("y contains missing data")
         if (any(is.na(mf)))
           stop("X contains missing data")
-        Xmat <- stats::model.matrix(formula, data = mf)
-        if ("(Intercept)" %in% colnames(Xmat))
-          Xmat <- Xmat[, colnames(Xmat) != "(Intercept)", drop = FALSE]
-        X <- Xmat
+        # If the user is passing categorical variables, preserve them
+        # as factor/character columns through to .preprocess_X() so the
+        # sqrt(0.5)-one-hot path can encode them in kbal/GPSS style.
+        # Otherwise fall back to the legacy model.matrix expansion that
+        # ships them as numeric dummies.
+        if (!is.null(cat_columns)) {
+          rhs_vars <- all.vars(formula[[3L]])
+          if (!all(rhs_vars %in% names(mf)))
+            stop("formula RHS variables not found in data")
+          X <- mf[, rhs_vars, drop = FALSE]
+        } else {
+          Xmat <- stats::model.matrix(formula, data = mf)
+          if ("(Intercept)" %in% colnames(Xmat))
+            Xmat <- Xmat[, colnames(Xmat) != "(Intercept)", drop = FALSE]
+          X <- Xmat
+        }
         y <- yvec
       }
 
       # checks
       y <- as.matrix(y)
-      X <- as.matrix(X)
-
-      if (is.numeric(X)==FALSE){
-       stop("X must be numeric")
+      # X stays as a data.frame (if supplied as one) so .preprocess_X()
+      # can accept factor / character columns when cat_columns is set.
+      # If X arrived as a bare vector or a 1-D atomic, lift it to a
+      # single-column matrix so nrow(X) / ncol(X) behave; the
+      # all-numeric assertion happens after preprocessing below.
+      if (!is.data.frame(X) && is.null(dim(X))) {
+        X <- as.matrix(X)
       }
+
       if (is.numeric(y)==FALSE){
        stop("y must be numeric")
       }
-      if (sum(is.na(X)) > 0) {
-        stop("X contains missing data")
+      if (!is.data.frame(X)) {
+        if (anyNA(X)) stop("X contains missing data")
+      } else {
+        if (anyNA(X)) stop("X contains missing data")
       }
       if (sum(is.na(y)) > 0) {
         stop("y contains missing data")
@@ -81,7 +100,6 @@ function(     X=NULL,
       }
 
       n <- nrow(X)
-      d <- ncol(X)
       if (n!=nrow(y)){
        stop("nrow(X) not equal to number of elements in y")
       }
@@ -111,32 +129,72 @@ function(     X=NULL,
         }
       }
 
+      # ---- preprocess X ------------------------------------------------------
+      # .preprocess_X() unifies the legacy "standardize every column to
+      # sd=1" behavior with the kbal/GPSS-style sqrt(0.5)-one-hot
+      # encoding for categorical columns named in cat_columns. When
+      # cat_columns is NULL (the default), no one-hot expansion happens
+      # and the continuous-only output is bit-identical to the legacy
+      # scale() block this replaces.
+      X_input_raw <- X
+      # Only warn about unmarked categorical-looking columns when the
+      # user didn't supply cat_columns at all. A non-NULL cat_columns
+      # (even integer(0) / character(0)) signals "I have looked and
+      # this is what I want" -- silence the nudge in that case.
+      .prep <- .preprocess_X(X, cat_columns = cat_columns,
+                             warn_unmarked = is.null(cat_columns))
+      X <- .prep$X_proc
+      d <- ncol(X)
 
-      # default sigma to dim of X
-      if(is.null(sigma)) { sigma <- d
+      # Default column names on the *processed* matrix; .preprocess_X()
+      # already produces informative names for one-hot expansions
+      # ("varname<level>") that we should not overwrite.
+      if (is.null(colnames(X))) {
+        colnames(X) <- paste("x", seq_len(d), sep = "")
+      }
+
+      # Per-processed-column scale used to map derivatives back to the
+      # input space. For continuous columns this is the original sd
+      # (matching legacy behavior). For sqrt(0.5)-one-hot columns this
+      # is 1/sqrt(0.5) so the chain-rule division gives a derivative
+      # per unit change in the underlying 0/1 indicator; fdskrls()
+      # overwrites the AME for these columns with the actual
+      # prediction difference, which is the interpretable quantity.
+      X.init <- X_input_raw
+      X.init.sd <- rep(NA_real_, d)
+      cont_block <- seq_along(.prep$cont_idx)
+      if (length(cont_block)) {
+        X.init.sd[cont_block] <- .prep$cont_scales
+      }
+      cat_block <- setdiff(seq_len(d), cont_block)
+      if (length(cat_block)) {
+        X.init.sd[cat_block] <- 1 / .prep$onehot_scale
+      }
+      if (any(X.init.sd == 0)) {
+        stop("at least one column has zero variance after preprocessing")
+      }
+
+      y.init <- y
+      y.init.sd <- apply(y.init, 2, sd)
+      y.init.mean <- mean(y.init)
+      y <- scale(y, center = y.init.mean, scale = y.init.sd)
+
+      # default sigma: maxvarK (new in v1.7), with a one-line
+      # transition message so existing users notice the change. Pin
+      # `sigma = ncol(X_processed)` to recover the pre-1.7 behavior.
+      if (is.null(sigma)) {
+        sigma <- b_maxvarK(X)$sigma
+        if (print.level > 0) {
+          message("krls: sigma chosen by maximizing off-diagonal var(K) ",
+                  "(new default in v1.7; pre-1.7 default was sigma = ncol(X) = ",
+                  d, "). Set sigma explicitly to silence this message.")
+        }
       } else {
         stopifnot(is.vector(sigma),
-                  length(sigma)==1,
+                  length(sigma) == 1L,
                   is.numeric(sigma),
-                  sigma>0)
+                  sigma > 0)
       }
-
-      # column names
-      if (is.null(colnames(X))) {
-      colnames(X) <- paste("x",1:d,sep="")
-      }
-
-      # scale
-      X.init <- X
-      X.init.sd <- apply(X.init,2,sd)
-      if (sum(X.init.sd==0)) {
-        stop("at least one column in X is a constant, please remove the constant(s)")
-      }
-      y.init <- y
-      y.init.sd <- apply(y.init,2,sd)
-      y.init.mean <- mean(y.init)
-      X <- scale(X,center=TRUE,scale=X.init.sd)
-      y <- scale(y,center=y.init.mean,scale=y.init.sd)
 
       # ---- auto-dispatch ----------------------------------------------------
       # `approx = "auto"` (the default) uses the exact path when the
@@ -267,6 +325,8 @@ function(     X=NULL,
           Looe               = Looe,
           fitted             = yfitted,
           X                  = X.init,
+          X_proc             = X,              # kernel-space (processed) X
+          prep               = .prep,          # preprocessing metadata
           y                  = y.init,
           sigma              = sigma,
           lambda             = lambda,
@@ -439,6 +499,8 @@ function(     X=NULL,
              Looe=Looe,
              fitted=yfitted,
              X=X.init,
+             X_proc=X,           # kernel-space (processed) X
+             prep=.prep,         # preprocessing metadata
              y=y.init,
              sigma=sigma,
              lambda=lambda,

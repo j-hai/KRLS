@@ -3,7 +3,8 @@ test_that("krls() returns the expected structure on linear data", {
   fit <- krls(X = d$X, y = d$y, print.level = 0)
 
   expect_s3_class(fit, "krls")
-  expect_named(fit, c("K", "coeffs", "Looe", "fitted", "X", "y",
+  expect_named(fit, c("K", "coeffs", "Looe", "fitted", "X", "X_proc",
+                      "prep", "y",
                       "sigma", "lambda", "R2", "derivatives",
                       "avgderivatives", "var.avgderivatives",
                       "vcov.c", "vcov.fitted", "binaryindicator",
@@ -51,7 +52,12 @@ test_that("krls(print.level = 0) is silent", {
 
 test_that("R 4.4+ deprecation warning is gone (regression test for 1.0-0)", {
   d <- make_linear_data()
-  expect_no_warning(krls(X = d$X, y = d$y, print.level = 0))
+  # cat_columns = integer(0) acknowledges the binary x2 column the
+  # fixture treats as continuous, silencing the v1.7 categorical
+  # nudge so this test still surfaces any R 4.4-deprecation warning
+  # if one comes back.
+  expect_no_warning(krls(X = d$X, y = d$y, cat_columns = integer(0),
+                         print.level = 0))
 })
 
 test_that("user-supplied tol is honored by lambdasearch (regression for 1.3-0)", {

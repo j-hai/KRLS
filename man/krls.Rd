@@ -15,7 +15,8 @@ approx = c("auto", "none", "nystrom"), nystrom_m = NULL,
 landmarks = NULL, landmark_method = c("random", "kmeans"),
 nystrom_eps = sqrt(.Machine$double.eps),
 landmark_seed = NULL,
-lambda_method = c("loo", "gcv"))
+lambda_method = c("loo", "gcv"),
+cat_columns = NULL)
 }
 
 \arguments{
@@ -37,8 +38,9 @@ String vector that specifies which kernel should be used. Must be one of \code{g
 A positive scalar that specifies the \eqn{\lambda}{lambda} parameter for the regularizer (see details). It governs the tradeoff between model fit and complexity. By default, this parameter is chosen by minimizing the sum of the squared leave-one-out errors.
 }
   \item{sigma}{
-A positive scalar that specifies the bandwidth of the Gaussian kernel (see \code{\link{gausskernel}} for details). 
-By default, the bandwidth is set equal to \var{D} (the number of dimensions) which typically yields a reasonable scaling of the distances between observations in the standardized data that is used for the fitting. 
+A positive scalar that specifies the bandwidth of the Gaussian kernel (see \code{\link{gausskernel}} for details).
+
+\strong{Default changed in 1.7-0.} When \code{sigma = NULL}, \code{krls()} now selects the bandwidth that maximizes the off-diagonal variance of the kernel matrix \var{K} (see \code{\link{b_maxvarK}}), matching the convention used by \code{kbal::b_maxvarK} and \code{gpss}. The pre-1.7 default was \code{sigma = ncol(X_processed)}; pin that value explicitly to reproduce older fits. A one-line \code{message()} is emitted on the first call where the new default kicks in.
 }
   \item{derivative}{
 Logical that specifies whether pointwise partial derivatives should be computed. Currently, derivatives are only implemented for the Gaussian Kernel.
@@ -153,6 +155,29 @@ remember a \code{set.seed()} call in their own code and without the
 silent-seed-reset failure mode that can plague simulations. Default
 is \code{NULL}, in which case landmark selection draws from
 whichever RNG state the caller has in effect.
+}
+
+\item{cat_columns}{
+Optional categorical-column declaration (new in 1.7-0). One of:
+\code{NULL} (the default; no one-hot expansion, but a single warning
+is emitted if columns of \code{X} look categorical -- factor /
+character / logical / numeric with few unique values -- and were not
+declared); a character vector of column names in \code{X}; or an
+integer vector of column indices.
+
+Declared columns are one-hot encoded with all levels (no reference
+cell) and multiplied by \code{sqrt(0.5)}, matching the convention
+used in \code{kbal::one_hot} and \code{gpss}. The factor of
+\code{sqrt(0.5)} compensates for the doubled squared-Euclidean
+distance from carrying both the "in level k" and "not in level k"
+indicators, so two observations differing in one category contribute
+1 (not 2) to \eqn{||x_i - x_j||^2}{||x_i - x_j||^2} -- equivalent to
+a Hamming distance. Continuous columns are still standardized to
+\code{sd = 1}.
+
+There is no autodetection. Pass \code{cat_columns = integer(0)} (or
+\code{character(0)}) to acknowledge that you have looked at \var{X}
+and nothing is categorical; this silences the heuristic warning.
 }
 
 \item{lambda_method}{

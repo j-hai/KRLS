@@ -1,3 +1,67 @@
+# KRLS 1.7-0 (in development)
+
+Adds the two convention items deferred from Chad Hazlett's review of
+the 1.6 line: a `cat_columns` argument for kbal/GPSS-style one-hot
+rescaling of categorical inputs, and a `b_maxvarK` bandwidth selector
+that becomes the new default for `sigma`.
+
+## New arguments
+
+* `krls(..., cat_columns = NULL)` — character vector of column names
+  (or integer indices) flagging categorical inputs. When supplied,
+  those columns are one-hot encoded with all levels (no reference
+  cell) and multiplied by `sqrt(0.5)`, matching `kbal::one_hot` and
+  `gpss:::one_hot`. The `sqrt(0.5)` factor compensates for the
+  doubled squared-Euclidean distance from carrying both "in level k"
+  and "not in level k" indicators, restoring a Hamming-like distance
+  between two observations differing in one category. Continuous
+  columns are still standardized to `sd = 1`.
+
+  When `cat_columns` is left at `NULL`, `krls()` scans the input and
+  emits a single warning if it finds columns that look categorical
+  (factor / character / logical, or numeric with `<= 10` unique
+  values) but were not declared. There is no autodetection; the
+  warning is a friendly nudge that mirrors how `kbal` and `gpss`
+  handle the same ambiguity. Pass `cat_columns = integer(0)` (or
+  `character(0)`) to acknowledge the situation and silence the
+  warning.
+
+## Changed defaults
+
+* `sigma = NULL` (the default) now triggers `b_maxvarK()` — bandwidth
+  chosen by maximizing the variance of the off-diagonal kernel
+  entries. The pre-1.7 default `sigma = ncol(X)` was a dimensional
+  heuristic; the maxvarK choice picks the bandwidth that makes the
+  columns of K most informative and matches the convention in `kbal`
+  and `gpss`. A one-line `message()` notes the change at first call
+  and tells users how to pin pre-1.7 behavior
+  (`sigma = ncol(X_processed)`).
+
+  Bit-identical reproduction of v1.5-2 and v1.6-x fits remains
+  available by pinning `sigma` and `approx = "none"` explicitly.
+
+## New exports
+
+* `b_maxvarK(X_processed)` — exact-path bandwidth selector. Returns
+  the sigma that maximizes off-diagonal `var(K)` over the search
+  interval.
+* `b_maxvarK_nystrom(X_processed, Z_processed)` — Nystrom-path
+  bandwidth selector that operates on the n × m cross-kernel
+  `C = K(X, Z)`.
+
+## Fit object additions
+
+* `$X_proc` — the kernel-space (preprocessed) matrix used internally.
+  Identical column count to `$X` when `cat_columns` is not used.
+* `$prep` — preprocessing metadata (centers, scales, factor levels)
+  for `predict()` to re-apply the same transformation to newdata.
+
+## Compatibility
+
+* All 188 tests from 1.6-1 still pass.
+* Fits produced by 1.6-x without `$prep` continue to work in
+  `predict()` via a legacy code path.
+
 # KRLS 1.6-1
 
 Bug-fix patch on top of 1.6-0.
