@@ -11,3 +11,5 @@
 ^README\.md$
 ^_pkgdown\.yml$
 ^docs$
+^krls_update_test\.html$
+^\.\.Rcheck$
