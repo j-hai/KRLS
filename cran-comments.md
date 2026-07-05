@@ -30,14 +30,16 @@ behaviour is affected.
 ### Test environments
 
 * macOS 26.5 (Tahoe), aarch64, local — R 4.5.3 (2026-03-11)
-* win-builder R-devel and R-release (planned on submission)
+* win-builder R-release — R 4.6.1 — Status: OK
+* win-builder R-devel — R-devel r90207 (2026-07-04) — Status: OK
 
 ### R CMD check results
 
 `R CMD check --as-cran` is clean locally (0 errors, 0 warnings; the
 only NOTE is the environmental "package 'V8' unavailable" math-render
-skip, present on CRAN's farm). The full test suite passes, including
-the amended backward-compatibility test.
+skip, present on CRAN's farm). Both win-builder runs returned Status:
+OK with no NOTEs. The full test suite passes, including the amended
+backward-compatibility test.
 
 ### Reverse dependencies
 
