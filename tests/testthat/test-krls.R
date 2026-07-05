@@ -89,8 +89,18 @@ test_that("default lambda_method is 'loo' (backward compatibility)", {
   d <- make_nonlinear_data(N = 80)
   fit_default <- krls(d$X, d$y, print.level = 0)
   fit_loo     <- krls(d$X, d$y, lambda_method = "loo", print.level = 0)
+  # The backward-compatibility contract is that the default objective is
+  # LOO -- the method label carries that guarantee.
   expect_equal(fit_default$lambda_method, "loo")
-  expect_equal(fit_default$lambda, fit_loo$lambda, tolerance = 1e-12)
+  # We deliberately do NOT assert bit-identical lambdas here. Both fits run
+  # the same deterministic exact path, so they agree exactly under a
+  # reproducible (single-threaded) BLAS. Under a non-reproducible
+  # multithreaded BLAS (e.g. MKL), looloss() differs at the ~1e-14 level
+  # between the two calls, and because the LOO objective is nearly flat over
+  # a wide lambda range the golden-section search amplifies that into a large
+  # difference in the selected lambda. Pinning lambda to 1e-12 would test
+  # platform determinism, not backward compatibility (cf. the earlier
+  # "Drop too-tight GCV-vs-LOO lambda comparison" fix).
 })
 
 test_that("aggressive eigtrunc that keeps a single eigenvector works", {

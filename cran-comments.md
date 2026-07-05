@@ -1,6 +1,52 @@
 # cran-comments.md
 
-## Submission notes for KRLS 1.7-0
+## Submission notes for KRLS 1.7-1
+
+This is a test-only patch that resolves the "Additional issues" MKL
+check flagged for 1.7-0
+(<https://www.stats.ox.ac.uk/pub/bdr/Rblas/MKL/KRLS.out>).
+
+### What changed
+
+The MKL run failed a single backward-compatibility test,
+`test-krls.R:93` ("default lambda_method is 'loo'"), which asserted
+that two independent `krls()` fits select a bit-identical `lambda`
+(`tolerance = 1e-12`). Both fits run the same deterministic exact
+path, so under a reproducible single-threaded BLAS they agree exactly
+and the test passes on every flavour of the main CRAN check. Under
+Intel MKL's multithreaded BLAS the leave-one-out objective is not
+reproducible between the two calls (~1e-14 differences from parallel
+reduction order); because that objective is nearly flat over a wide
+`lambda` range, the golden-section search amplifies the perturbation
+into a large gap in the selected `lambda` (0.052 vs ~0 in the report).
+
+The assertion was therefore testing platform determinism, not
+behaviour. The test now verifies the actual contract — that the
+default objective is LOO, via the `lambda_method` label — and drops
+the `lambda`-value comparison. No package (R/src) code changed, so
+results on the reference BLAS are unchanged and no reverse-dependency
+behaviour is affected.
+
+### Test environments
+
+* macOS 26.5 (Tahoe), aarch64, local — R 4.5.3 (2026-03-11)
+* win-builder R-devel and R-release (planned on submission)
+
+### R CMD check results
+
+`R CMD check --as-cran` is clean locally (0 errors, 0 warnings; the
+only NOTE is the environmental "package 'V8' unavailable" math-render
+skip, present on CRAN's farm). The full test suite passes, including
+the amended backward-compatibility test.
+
+### Reverse dependencies
+
+Unchanged from 1.7-0: `InfluenceBorrowing` and `qqkrls`. Because this
+patch touches only a test file, revdep behaviour is unaffected.
+
+---
+
+## Submission notes for KRLS 1.7-0 (previous release)
 
 This release brings CRAN up to date with a substantial line of
 development since the last published version (1.1-0, 2026-04-30).

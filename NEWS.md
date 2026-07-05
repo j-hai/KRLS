@@ -1,3 +1,21 @@
+# KRLS 1.7-1
+
+Test-only patch to clear the CRAN "Additional issues" MKL check.
+
+* The backward-compatibility test "default lambda_method is 'loo'"
+  no longer asserts that two independent `krls()` fits select a
+  bit-identical `lambda`. Both fits run the same deterministic exact
+  path, so they agree exactly under a reproducible (single-threaded)
+  BLAS, but under a non-reproducible multithreaded BLAS such as Intel
+  MKL the leave-one-out objective differs at the ~1e-14 level between
+  the two calls. Because that objective is nearly flat over a wide
+  `lambda` range, the golden-section search amplifies the difference
+  into a large gap in the selected `lambda` (observed 0.052 vs ~0 on
+  MKL). The test now checks the actual contract — that the default
+  objective is LOO, carried by the `lambda_method` label — and leaves
+  the value comparison out. No package code changed; results on the
+  reference BLAS are unaffected.
+
 # KRLS 1.7-0
 
 Adds the two convention items deferred from Chad Hazlett's review of
